@@ -27,10 +27,6 @@
 namespace BehringerKickCustom {
 namespace Hardware {
 
-// ============================================================================
-// SECTION 1: HARDWARE EVENT DEFINITIONS & COMPROTOCOL FRAMES
-// ============================================================================
-
 enum class HardwareEventType : uint8_t {
     PadDown = 0,
     PadUp,
@@ -115,10 +111,7 @@ struct RGBColor {
     static constexpr RGBColor Rose()        { return {244, 63,  94};  } // Recording
 };
 
-// ============================================================================
-// SECTION 2: SCENE SNAPSHOT & TOUCH STRIP MORPHING (Macro A/B)
-// ============================================================================
-
+// Scene Snapshot for Touch Strip Morphing (Macro A/B)
 struct SceneSnapshot {
     float filterCutoffHz   = 8500.0f;
     float filterResonance  = 0.20f;
@@ -131,10 +124,6 @@ struct SceneSnapshot {
     float wsolaStretch     = 1.0f;
 };
 
-// ============================================================================
-// SECTION 3: HARDWARE BRIDGE & CONTROLLER ROUTER (KickHardwareBridge)
-// ============================================================================
-
 class KickHardwareBridge {
 public:
     static constexpr size_t kNumTracks = 4;
@@ -146,12 +135,10 @@ public:
         padLeds_.fill(RGBColor::Black());
         activeNotesPerTrack_.resize(kNumTracks);
 
-        // Initialize default track lengths
         for (auto& trk : tracks_) {
             trk.setPatternLength(16);
         }
 
-        // Initialize Scene Snapshots for Touch Strip Morphing
         sceneA_.filterCutoffHz  = 4200.0f;
         sceneA_.fmOp4Feedback   = 0.15f;
         sceneA_.grainSizeMs     = 60.0f;
@@ -167,9 +154,6 @@ public:
         updatePadLeds();
     }
 
-    // ------------------------------------------------------------------------
-    // Configuration & State Getters/Setters
-    // ------------------------------------------------------------------------
     ScreenView getScreenView() const { return currentView_; }
     void setScreenView(ScreenView view) {
         currentView_ = view;
@@ -209,26 +193,27 @@ public:
     Kick::QuantizeMode getQuantizeMode() const { return quantizeMode_; }
     void setQuantizeMode(Kick::QuantizeMode q) { quantizeMode_ = q; }
 
-    // Access to child DSP and Sequencing engines
-    AudIO::FM4Patch&           getFMPatch()       { return fmPatch_; }
-    const AudIO::FM4Patch&     getFMPatch() const { return fmPatch_; }
-    AudIO::GranularParams&     getGrainParams()   { return grainParams_; }
+    AudIO::FM4Patch&             getFMPatch()       { return fmPatch_; }
+    const AudIO::FM4Patch&       getFMPatch() const { return fmPatch_; }
+    AudIO::GranularParams&       getGrainParams()   { return grainParams_; }
     const AudIO::GranularParams& getGrainParams() const { return grainParams_; }
-    AudIO::SampleChopper&      getChopper()       { return chopper_; }
-    const AudIO::SampleChopper& getChopper() const { return chopper_; }
-    Kick::ChordScaleEngine&    getChordEngine()   { return chordEngine_; }
-    Kick::ChordModifiers&      getChordMods()     { return chordMods_; }
-    Kick::Arpeggiator&         getArpeggiator()   { return arpeggiator_; }
-    Kick::ArpParams&           getArpParams()     { return arpParams_; }
-    Kick::StepSequencerTrack&  getTrack(size_t idx) { return tracks_[idx % kNumTracks]; }
+    AudIO::SampleChopper&        getChopper()       { return chopper_; }
+    const AudIO::SampleChopper&  getChopper() const { return chopper_; }
+    Kick::ChordScaleEngine&      getChordEngine()   { return chordEngine_; }
+    Kick::ChordModifiers&        getChordMods()     { return chordMods_; }
+    Kick::Arpeggiator&           getArpeggiator()   { return arpeggiator_; }
+    Kick::ArpParams&             getArpParams()     { return arpParams_; }
+
+    Kick::StepSequencerTrack&       getTrack(size_t idx)       { return tracks_[idx % kNumTracks]; }
+    const Kick::StepSequencerTrack& getTrack(size_t idx) const { return tracks_[idx % kNumTracks]; }
 
     const std::array<RGBColor, kNumPads>& getPadLeds() const { return padLeds_; }
+    uint8_t getCurrentStep() const { return currentStep_; }
+    uint8_t getSelectedSliceIndex() const { return selectedSliceIdx_; }
+    uint8_t getSelectedStepIndex() const { return selectedStepIdx_; }
+    std::vector<uint8_t>& getActiveNotesForTrack(size_t t) { return activeNotesPerTrack_[t % kNumTracks]; }
+    uint8_t getLastTriggeredVelocity() const { return lastTriggeredVelocity_; }
 
-    // ------------------------------------------------------------------------
-    // ComProtocol Hardware Event Handlers
-    // ------------------------------------------------------------------------
-
-    // 1. 16 Physical RGB Pads (PadDown / PadUp / Poly Pressure)
     void handlePadDown(const PadEvent& ev) {
         if (ev.padIndex >= kNumPads) return;
         padPressed_[ev.padIndex] = true;
@@ -248,14 +233,12 @@ public:
         padPressed_[ev.padIndex] = false;
 
         if (padMode_ == PadOperatingMode::ChordScale) {
-            // Check modifier releases
             if (ev.padIndex == 15 && !chordMods_.strumAndLatch) {
-                // Clear latch if latch mode is off
                 heldChordNotes_.clear();
             }
         } else if (padMode_ == PadOperatingMode::StepSequencer) {
             if (heldStepPad_ == static_cast<int>(ev.padIndex)) {
-                heldStepPad_ = -1; // Release step P-Lock latch
+                heldStepPad_ = -1;
             }
         }
         updatePadLeds();
@@ -263,29 +246,23 @@ public:
 
     void handlePadPressure(const PadEvent& ev) {
         if (ev.padIndex >= kNumPads) return;
-        // Map polyphonic aftertouch to voice modulation (Filter/LFO/Grain Pitch)
         float normPressure = static_cast<float>(ev.pressure) / 127.0f;
         if (activeTrackIdx_ == 0) {
-            // FM aftertouch opens filter & raises modulation
             fmPatch_.filterCutoffHz = clampf(4000.0f + normPressure * 12000.0f, 60.0f, 18000.0f);
         } else if (activeTrackIdx_ == 1) {
-            // Granular aftertouch increases density & pitch shimmer
             grainParams_.densityHz  = clampf(14.0f + normPressure * 50.0f, 1.0f, 80.0f);
             grainParams_.pitchSpray = normPressure * 0.4f;
         }
     }
 
-    // 2. 4 Endless Optical Rotary Encoders
     void handleKnobTurn(const KnobEvent& ev) {
         if (ev.knobIndex >= kNumKnobs) return;
 
-        // Elektron-Style Parameter Lock (P-Lock) on Held Step
         if (padMode_ == PadOperatingMode::StepSequencer && heldStepPad_ >= 0) {
             recordParameterLock(static_cast<size_t>(heldStepPad_), ev);
             return;
         }
 
-        // Contextual Page Router based on Active Screen View
         switch (currentView_) {
             case ScreenView::View_FM4Synth:
                 AudIO::FM4Voice::applyHardwareKnob(fmPatch_, fmKnobBank_, ev.knobIndex, ev.delta, ev.pushHeld);
@@ -305,62 +282,48 @@ public:
         }
     }
 
-    // 3. Optical Jog Wheel + Push Button
     void handleJogWheel(const JogEvent& ev) {
         if (currentView_ == ScreenView::View_FM4Synth) {
-            // Turn Jog Wheel: Cycle FM Algorithm 1..8
             int alg = static_cast<int>(fmPatch_.algorithm) + ev.stepDelta;
             alg = (alg % 8 + 8) % 8;
             fmPatch_.algorithm = static_cast<AudIO::FMAlgorithm>(alg);
         } else if (currentView_ == ScreenView::View_SampleChopper) {
-            // Turn Jog Wheel: Select active slice 0..15
             int sl = static_cast<int>(selectedSliceIdx_) + ev.stepDelta;
             selectedSliceIdx_ = static_cast<uint8_t>((sl % 16 + 16) % 16);
         } else if (currentView_ == ScreenView::View_StepSequencer) {
-            // Turn Jog Wheel: Select active step 0..15
             int st = static_cast<int>(selectedStepIdx_) + ev.stepDelta;
             selectedStepIdx_ = static_cast<uint8_t>((st % 16 + 16) % 16);
         } else if (currentView_ == ScreenView::View_GranularCloud) {
-            // Turn Jog Wheel: Shift grain pitch semitones
             grainParams_.pitchSemitones = clampf(grainParams_.pitchSemitones + static_cast<float>(ev.stepDelta), -24.0f, 24.0f);
         }
         updatePadLeds();
     }
 
-    // 4. Capacitive Touch Strip (Ribbon Macro & Scene Morphing)
     void handleTouchStrip(const TouchStripEvent& ev) {
         lastTouchStrip_ = ev;
         if (!ev.isTouched) return;
 
         if (touchStripMode_ == TouchStripMode::SceneMorphAB) {
-            // Smoothly morph between Scene A (pos 0.0) and Scene B (pos 1.0)
             morphScenes(ev.position);
         } else if (touchStripMode_ == TouchStripMode::GrainScrub) {
-            // Direct Granular Playhead Scrubbing
             grainParams_.position = clampf(ev.position, 0.01f, 0.99f);
         } else if (touchStripMode_ == TouchStripMode::StrumBar) {
-            // Virtual Strum Bar: play held chord notes with dynamic strum velocity
             if (!heldChordNotes_.empty()) {
                 triggerVoiceChord(heldChordNotes_, static_cast<uint8_t>(clampf(ev.pressure * 127.0f, 60.0f, 127.0f)));
             }
         }
     }
 
-    // 5. AI Gesture Camera (VL53L5CX Time-of-Flight Stream)
     void handleAIGesture(const AIGestureEvent& ev) {
         lastGesture_ = ev;
         if (!ev.handDetected) return;
 
-        // X-Axis (Left-Right) modulates Filter Cutoff or Pan
-        // Y-Axis (Up-Down) modulates FM Waveform Morph or Grain Cloud Size
-        // Z-Axis (Distance) modulates Filter Resonance or Harmonic Drive
         float cutoffMod = (ev.posX - 0.5f) * 6000.0f;
         fmPatch_.filterCutoffHz = clampf(fmPatch_.filterCutoffHz + cutoffMod * 0.05f, 60.0f, 18000.0f);
         fmPatch_.drive          = clampf(ev.distanceZ, 0.0f, 1.0f);
         grainParams_.grainSizeMs= clampf(20.0f + ev.posY * 300.0f, 10.0f, 800.0f);
     }
 
-    // 6. Transport Buttons
     void handleTransportButton(TransportControl btn) {
         switch (btn) {
             case TransportControl::Play:
@@ -381,20 +344,15 @@ public:
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Master Clock Tick & Voice Dispatcher (960 PPQN)
-    // ------------------------------------------------------------------------
     void advanceClockTick() {
         if (!isPlaying_) return;
 
-        // 1/16th step occurs every (960 / 4) = 240 ticks
         constexpr int32_t kTicksPerStep = kPPQN / 4;
 
         if (currentTick_ % kTicksPerStep == 0) {
             uint8_t stepIdx = static_cast<uint8_t>((currentTick_ / kTicksPerStep) % tracks_[activeTrackIdx_].getPatternLength());
             currentStep_ = stepIdx;
 
-            // Trigger Arpeggiator note if enabled
             if (arpParams_.mode != Kick::ArpMode::ChordRepeat && !heldChordNotes_.empty()) {
                 auto arpNotes = arpeggiator_.nextStepNotes(arpParams_);
                 if (!arpNotes.empty()) {
@@ -402,11 +360,9 @@ public:
                 }
             }
 
-            // Trigger active sequencer steps across all 4 tracks
             for (size_t t = 0; t < kNumTracks; ++t) {
                 const auto& step = tracks_[t].getStep(stepIdx);
                 if (step.enabled) {
-                    // Apply parameter locks if defined
                     if (step.plocks.hasFilterCutoffLock) {
                         fmPatch_.filterCutoffHz = step.plocks.filterCutoffHz;
                     }
@@ -416,8 +372,6 @@ public:
                     if (step.plocks.hasFMModIndexLock) {
                         fmPatch_.ops[1].level = step.plocks.fmOp2Level;
                     }
-
-                    // Dispatch voice note trigger
                     triggerTrackStepNotes(t, step.notes, step.velocity);
                 }
             }
@@ -438,12 +392,8 @@ private:
         StrumBar
     };
 
-    // ------------------------------------------------------------------------
-    // Internal Mode-Specific Pad Handlers
-    // ------------------------------------------------------------------------
     void handleChordPadDown(uint8_t padIdx, uint8_t velocity) {
         if (padIdx >= 12) {
-            // Pads 13-16: Live Chord Modifiers
             if (padIdx == 12) chordMods_.add7th9th = !chordMods_.add7th9th;
             if (padIdx == 13) chordMods_.sus4Toggle = !chordMods_.sus4Toggle;
             if (padIdx == 14) chordMods_.inversion = (chordMods_.inversion + 1) % 3;
@@ -451,13 +401,11 @@ private:
             return;
         }
 
-        // Pads 1-12: Trigger Chord
         auto notes = chordEngine_.triggerPad(padIdx, chordMods_);
         heldChordNotes_ = notes;
         arpeggiator_.setHeldNotes(notes, arpParams_);
         triggerVoiceChord(notes, velocity);
 
-        // Record into Sequencer if REC is active
         if (isRecording_) {
             tracks_[activeTrackIdx_].recordLivePadEvent(currentTick_, notes, velocity, 1.0f, quantizeMode_);
         }
@@ -479,16 +427,13 @@ private:
         heldStepPad_     = static_cast<int>(padIdx);
 
         auto& step = tracks_[activeTrackIdx_].getStepMutable(padIdx);
-        step.enabled = !step.enabled; // Toggle step active/inactive
+        step.enabled = !step.enabled;
         if (step.enabled && step.notes.empty()) {
             step.notes = {60};
             step.velocity = velocity;
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Voice Trigger Dispatchers
-    // ------------------------------------------------------------------------
     void triggerVoiceChord(const std::vector<uint8_t>& notes, uint8_t velocity) {
         activeNotesPerTrack_[activeTrackIdx_] = notes;
         lastTriggeredVelocity_ = velocity;
@@ -504,9 +449,6 @@ private:
         lastTriggeredVelocity_ = velocity;
     }
 
-    // ------------------------------------------------------------------------
-    // Knob Handlers for Granular & Sequencer
-    // ------------------------------------------------------------------------
     void applyGranularKnob(uint8_t knobIdx, float delta, bool pushHeld) {
         if (grainKnobBank_ == 0) {
             if (knobIdx == 0) grainParams_.position       = clampf(grainParams_.position + delta * 0.5f, 0.0f, 1.0f);
@@ -555,9 +497,6 @@ private:
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Scene A/B Morphing via Touch Strip
-    // ------------------------------------------------------------------------
     void morphScenes(float t) {
         t = clampf(t, 0.0f, 1.0f);
         fmPatch_.filterCutoffHz = sceneA_.filterCutoffHz + t * (sceneB_.filterCutoffHz - sceneA_.filterCutoffHz);
@@ -566,20 +505,16 @@ private:
         grainParams_.densityHz  = sceneA_.grainDensityHz + t * (sceneB_.grainDensityHz - sceneA_.grainDensityHz);
     }
 
-    // ------------------------------------------------------------------------
-    // Dynamic 16-Pad RGB LED Matrix Update
-    // ------------------------------------------------------------------------
     void updatePadLeds() {
         if (padMode_ == PadOperatingMode::ChordScale) {
             for (size_t i = 0; i < kNumPads; ++i) {
                 if (padPressed_[i]) {
                     padLeds_[i] = RGBColor::FullWhite();
                 } else if (i < 7) {
-                    padLeds_[i] = RGBColor::Green();       // Diatonic degrees I-vii
+                    padLeds_[i] = RGBColor::Green();
                 } else if (i < 12) {
-                    padLeds_[i] = RGBColor::Amber();       // Borrowed / Turnaround
+                    padLeds_[i] = RGBColor::Amber();
                 } else {
-                    // Pads 13-16 Modifiers
                     if (i == 12) padLeds_[i] = chordMods_.add7th9th ? RGBColor::FullWhite() : RGBColor::Cyan();
                     if (i == 13) padLeds_[i] = chordMods_.sus4Toggle ? RGBColor::FullWhite() : RGBColor::Cyan();
                     if (i == 14) padLeds_[i] = (chordMods_.inversion > 0) ? RGBColor::FullWhite() : RGBColor::Purple();
@@ -591,7 +526,7 @@ private:
                 if (padPressed_[i]) {
                     padLeds_[i] = RGBColor::FullWhite();
                 } else if (i == selectedSliceIdx_) {
-                    padLeds_[i] = RGBColor::BrightAmber(); // Currently selected slice
+                    padLeds_[i] = RGBColor::BrightAmber();
                 } else {
                     padLeds_[i] = RGBColor::Green();
                 }
@@ -600,26 +535,22 @@ private:
             const auto& trk = tracks_[activeTrackIdx_];
             for (size_t i = 0; i < kNumPads; ++i) {
                 if (isPlaying_ && currentStep_ == i) {
-                    padLeds_[i] = RGBColor::Gold();         // Running playhead
+                    padLeds_[i] = RGBColor::Gold();
                 } else if (padPressed_[i] || heldStepPad_ == static_cast<int>(i)) {
-                    padLeds_[i] = RGBColor::FullWhite();    // Step being edited/P-Locked
+                    padLeds_[i] = RGBColor::FullWhite();
                 } else if (trk.getStep(i).enabled) {
-                    padLeds_[i] = RGBColor::Purple();       // Active programmed note
+                    padLeds_[i] = RGBColor::Purple();
                 } else {
-                    padLeds_[i] = RGBColor::DimWhite();     // Inactive step
+                    padLeds_[i] = RGBColor::DimWhite();
                 }
             }
         }
     }
 
     void registerTapTempo() {
-        // Simple tap tempo handler
         bpm_ = std::min(240.0f, bpm_ + 2.0f);
     }
 
-    // ------------------------------------------------------------------------
-    // Member State Variables
-    // ------------------------------------------------------------------------
     ScreenView           currentView_       = ScreenView::View_FM4Synth;
     PadOperatingMode     padMode_           = PadOperatingMode::ChordScale;
     uint8_t              activeTrackIdx_    = 0;
@@ -633,9 +564,8 @@ private:
 
     uint8_t              selectedSliceIdx_  = 0;
     uint8_t              selectedStepIdx_   = 0;
-    int                  heldStepPad_       = -1; // -1 = none held
+    int                  heldStepPad_       = -1;
 
-    // Sub-Engines
     AudIO::FM4Patch      fmPatch_{};
     AudIO::FMKnobBank    fmKnobBank_        = AudIO::FMKnobBank::Bank1_RatiosAndTuning;
 
@@ -655,7 +585,6 @@ private:
     std::vector<std::vector<uint8_t>>     activeNotesPerTrack_;
     uint8_t                               lastTriggeredVelocity_ = 100;
 
-    // Peripherals State
     std::array<bool, kNumPads>     padPressed_{};
     std::array<RGBColor, kNumPads> padLeds_{};
     TouchStripEvent                lastTouchStrip_{};
