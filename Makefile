@@ -1,11 +1,11 @@
 CXX      ?= g++
-CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Werror -IAudIO/CustomEngines
+CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Werror -IAudIO/CustomEngines -IKick/CustomSequencer
 
-.PHONY: all test test_phase1 test_phase2 clean
+.PHONY: all test test_phase1 test_phase2 test_phase3 clean
 
 all: test
 
-test: test_phase1 test_phase2
+test: test_phase1 test_phase2 test_phase3
 
 test_phase1: tests/test_firmware_core.cpp AudIO/CustomEngines/kick_custom_firmware_core.hpp
 	@echo "------------------------------------------------------------"
@@ -21,5 +21,12 @@ test_phase2: tests/test_phase2_chopper.cpp AudIO/CustomEngines/kick_sample_chopp
 	$(CXX) $(CXXFLAGS) tests/test_phase2_chopper.cpp -o build_test_phase2
 	./build_test_phase2
 
+test_phase3: tests/test_phase3_bridge.cpp Kick/CustomSequencer/kick_hardware_bridge.hpp AudIO/CustomEngines/kick_sample_chopper.hpp AudIO/CustomEngines/kick_custom_firmware_core.hpp
+	@echo "------------------------------------------------------------"
+	@echo "Building & running Phase 3 Hardware Bridge & ComProtocol Suite..."
+	@echo "------------------------------------------------------------"
+	$(CXX) $(CXXFLAGS) tests/test_phase3_bridge.cpp -o build_test_phase3
+	./build_test_phase3
+
 clean:
-	rm -f build_test_phase1 build_test_phase2 build_test_runner
+	rm -f build_test_phase1 build_test_phase2 build_test_phase3 build_test_runner
