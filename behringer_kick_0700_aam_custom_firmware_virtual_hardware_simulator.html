@@ -1,0 +1,1887 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Behringer KICK (0700-AAM) — Custom Firmware Virtual Hardware Simulator</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: radial-gradient(circle at 50% 15%, #1f2430 0%, #0d0f14 100%);
+      color: #f1f5f9;
+      user-select: none;
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .hw-chassis {
+      background: linear-gradient(145deg, #262932 0%, #171920 100%);
+      box-shadow: 0 25px 60px rgba(0,0,0,0.85), inset 0 1px 1px rgba(255,255,255,0.12);
+      border: 2px solid #333846;
+    }
+    .screen-bezel {
+      background: #07090d;
+      box-shadow: inset 0 0 18px rgba(0,0,0,0.95), 0 1px 0 rgba(255,255,255,0.08);
+      border: 3px solid #1e222d;
+    }
+    .mpc-pad {
+      transition: transform 0.05s ease, box-shadow 0.08s ease, background-color 0.08s ease;
+      box-shadow: inset 0 2px 4px rgba(255,255,255,0.12), 0 4px 10px rgba(0,0,0,0.6);
+    }
+    .mpc-pad:active, .mpc-pad.pad-active {
+      transform: translateY(2px) scale(0.98);
+    }
+    .touch-strip {
+      background: linear-gradient(180deg, #0b0d13 0%, #161b26 50%, #0b0d13 100%);
+      box-shadow: inset 0 2px 8px rgba(0,0,0,0.9);
+    }
+    input[type="range"] {
+      accent-color: #f97316;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-2 sm:p-4 flex flex-col items-center justify-start">
+
+  <!-- Top Status & Quick Guide Banner -->
+  <header class="w-full max-w-6xl mb-3 flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800">
+    <div class="flex items-center gap-3">
+      <span class="px-2.5 py-1 rounded bg-orange-600 text-xs font-bold tracking-wider uppercase mono">BE 0700-AAM</span>
+      <div>
+        <h1 class="text-sm sm:text-base font-bold text-white tracking-tight">Behringer KICK — Custom Firmware Workbench (v0.2-sim)</h1>
+        <p class="text-xs text-slate-400">4-Op FM • Sample-Coupled Granular • Chopper/Stretcher • 1-Pad Scale/Chord + Arp • 64-Step Sequencer</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <button id="btnAudioInit" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow flex items-center gap-1.5">
+        <span id="audioDot" class="w-2 h-2 rounded-full bg-amber-300 animate-pulse"></span>
+        <span id="audioStatusText">Click Any Pad or Here to Start Audio</span>
+      </button>
+      <button id="btnLoadDemo" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold">
+        Load Demo Pattern
+      </button>
+      <button id="btnMute" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700">
+        Mute: OFF
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Hardware Unit Chassis -->
+  <main class="w-full max-w-6xl hw-chassis rounded-2xl p-3 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- LEFT / CENTER COLUMN: 7" Touchscreen + Touch Strip + 16 RGB Pads (Cols 1-8) -->
+    <section class="lg:col-span-8 flex flex-col gap-4">
+
+      <!-- 7" Touch Screen Display -->
+      <div class="screen-bezel rounded-xl p-3 flex flex-col justify-between min-h-[340px]">
+
+        <!-- Screen Top Bar: Transport, Tempo, Active Track, Scale & Quantize -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2 border-b border-slate-800 text-xs">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-semibold mono" id="lblActiveTrack">TRK 1: 4-OP FM</span>
+            <select id="selRootNote" aria-label="Root Note" class="bg-slate-800 text-slate-100 rounded px-2 py-0.5 border border-slate-700 mono text-xs">
+              <option value="60" selected>Root: C</option>
+              <option value="61">Root: C#</option>
+              <option value="62">Root: D</option>
+              <option value="63">Root: Eb</option>
+              <option value="64">Root: E</option>
+              <option value="65">Root: F</option>
+              <option value="66">Root: F#</option>
+              <option value="67">Root: G</option>
+              <option value="68">Root: Ab</option>
+              <option value="69">Root: A</option>
+              <option value="70">Root: Bb</option>
+              <option value="71">Root: B</option>
+            </select>
+            <select id="selScaleType" aria-label="Scale Type" class="bg-slate-800 text-slate-100 rounded px-2 py-0.5 border border-slate-700 mono text-xs">
+              <option value="NaturalMinor" selected>Scale: Natural Minor</option>
+              <option value="Major">Scale: Major</option>
+              <option value="Dorian">Scale: Dorian</option>
+              <option value="Phrygian">Scale: Phrygian</option>
+              <option value="Lydian">Scale: Lydian</option>
+              <option value="Mixolydian">Scale: Mixolydian</option>
+              <option value="HarmonicMinor">Scale: Harmonic Minor</option>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1 text-slate-300 mono">
+              BPM
+              <input id="inpBpm" type="number" min="60" max="200" value="118" class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-center text-orange-400 font-bold" />
+            </label>
+            <select id="selQuantize" aria-label="Input Quantize Mode" class="bg-slate-800 text-emerald-400 rounded px-2 py-0.5 border border-slate-700 mono text-xs">
+              <option value="Smart75" selected>QNT: Smart 75%</option>
+              <option value="Snap100">QNT: 100% Grid</option>
+              <option value="Off">QNT: Off (960 PPQN)</option>
+            </select>
+            <span id="lblStepCounter" class="px-2 py-0.5 rounded bg-slate-800 text-cyan-400 mono font-bold">STEP 01/16</span>
+          </div>
+        </div>
+
+        <!-- Screen Mode Navigation Tabs -->
+        <div class="grid grid-cols-4 gap-1.5 mb-2">
+          <button data-screen="fm" class="screen-tab py-1.5 px-2 rounded bg-orange-600 text-white font-semibold text-xs text-center transition">
+            1. 4-OP FM ENGINE
+          </button>
+          <button data-screen="granular" class="screen-tab py-1.5 px-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs text-center transition">
+            2. GRANULAR CLOUD
+          </button>
+          <button data-screen="chopper" class="screen-tab py-1.5 px-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs text-center transition">
+            3. SAMPLE CHOPPER
+          </button>
+          <button data-screen="sequencer" class="screen-tab py-1.5 px-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs text-center transition">
+            4. STEP SEQ & ARP
+          </button>
+        </div>
+
+        <!-- Dynamic Canvas / Interactive Screen Area -->
+        <div class="relative flex-1 bg-slate-950/90 rounded-lg border border-slate-800/90 p-2.5 flex flex-col justify-between overflow-hidden">
+
+          <!-- VIEW 1: 4-OP FM SYNTHESIS SCREEN -->
+          <div id="view-fm" class="screen-view flex flex-col h-full justify-between gap-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-orange-400 mono">ALGORITHM:</span>
+                <select id="selFmAlg" aria-label="FM Algorithm" class="bg-slate-900 text-white text-xs mono px-2 py-1 rounded border border-slate-700">
+                  <option value="0">Alg 1: 4 → 3 → 2 → 1 (Deep Serial Bass)</option>
+                  <option value="1">Alg 2: (3 + 4) → 2 → 1 (Woody / Slap)</option>
+                  <option value="2">Alg 3: (4 → 3 → 1) + (2 → 1) (E-Piano Tine)</option>
+                  <option value="3">Alg 4: (2 + 3 + 4) → 1 (Metallic Bell)</option>
+                  <option value="4" selected>Alg 5: (4 → 3) + (2 → 1) (Dual 2-Op Stack)</option>
+                  <option value="5">Alg 6: 4 → (1 + 2 + 3) (Lush FM Brass/Strings)</option>
+                  <option value="6">Alg 7: (4 → 3) + 2 + 1 (Hybrid Sub Pad)</option>
+                  <option value="7">Alg 8: 1 + 2 + 3 + 4 (4-Carrier Additive)</option>
+                </select>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs text-slate-400 mono">Sample-FM Mod:</span>
+                <button id="btnToggleSampleFm" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-xs mono border border-slate-700">
+                  OFF (0%)
+                </button>
+              </div>
+            </div>
+
+            <!-- Live FM Waveform & Operator Status Canvas -->
+            <div class="relative h-32 w-full bg-slate-900/80 rounded border border-slate-800 overflow-hidden">
+              <canvas id="canvasFmScope" class="w-full h-full block"></canvas>
+              <div class="absolute top-1.5 right-2 text-[11px] mono text-slate-400 bg-slate-950/80 px-2 py-0.5 rounded" id="lblFmSummary">
+                Op1: 1.0x | Op2: 2.0x | Op3: 1.0x | Op4: 3.0x | FB: 20%
+              </div>
+            </div>
+
+            <!-- FM 4-Knob Bank Selector -->
+            <div class="grid grid-cols-4 gap-1.5 pt-1">
+              <button data-fmbank="0" class="fm-bank-btn py-1 px-2 rounded bg-amber-500/20 border border-amber-500 text-amber-300 text-xs mono font-semibold">
+                Bank A: Op Ratios
+              </button>
+              <button data-fmbank="1" class="fm-bank-btn py-1 px-2 rounded bg-slate-900 border border-slate-800 text-slate-400 text-xs mono">
+                Bank B: Op Levels
+              </button>
+              <button data-fmbank="2" class="fm-bank-btn py-1 px-2 rounded bg-slate-900 border border-slate-800 text-slate-400 text-xs mono">
+                Bank C: Env & Morph
+              </button>
+              <button data-fmbank="3" class="fm-bank-btn py-1 px-2 rounded bg-slate-900 border border-slate-800 text-slate-400 text-xs mono">
+                Bank D: Filter/Drive
+              </button>
+            </div>
+          </div>
+
+          <!-- VIEW 2: SAMPLE-COUPLED GRANULAR SCREEN -->
+          <div id="view-granular" class="screen-view hidden flex-col h-full justify-between gap-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-cyan-400 mono">SOURCE BUFFER:</span>
+                <select id="selGrainSource" aria-label="Granular Source Buffer" class="bg-slate-900 text-white text-xs mono px-2 py-1 rounded border border-slate-700">
+                  <option value="chord" selected>Buffer 1: Resampled FM Lush Chord</option>
+                  <option value="break">Buffer 2: Amen/Breakbeat Drum Loop</option>
+                  <option value="vocal">Buffer 3: Formant Vocal Texture</option>
+                </select>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button id="btnGrainFreeze" class="px-2.5 py-0.5 rounded bg-slate-800 text-cyan-300 text-xs mono border border-cyan-800">
+                  FREEZE CLOUD: OFF
+                </button>
+                <button id="btnResampleFmToGrain" class="px-2.5 py-0.5 rounded bg-cyan-700 hover:bg-cyan-600 text-white text-xs mono font-semibold">
+                  Bounce FM Chord → Grain Buffer
+                </button>
+              </div>
+            </div>
+
+            <!-- Interactive Granular Waveform & Grain Cloud Canvas -->
+            <div class="relative h-32 w-full bg-slate-900/80 rounded border border-slate-800 overflow-hidden cursor-ew-resize" id="grainScrubBox">
+              <canvas id="canvasGrainWave" class="w-full h-full block"></canvas>
+              <div class="absolute bottom-1 left-2 text-[11px] mono text-cyan-300 bg-slate-950/80 px-2 py-0.5 rounded">
+                Drag across waveform (or use Touch Strip) to scrub Grain Position
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <button data-grainbank="0" class="grain-bank-btn py-1 px-2 rounded bg-cyan-500/20 border border-cyan-500 text-cyan-300 text-xs mono font-semibold">
+                Knob Bank A: Pos / Size / Density / Pitch
+              </button>
+              <button data-grainbank="1" class="grain-bank-btn py-1 px-2 rounded bg-slate-900 border border-slate-800 text-slate-400 text-xs mono">
+                Knob Bank B: Spray / Shimmer / Window / Reverse
+              </button>
+            </div>
+          </div>
+
+          <!-- VIEW 3: SAMPLE CHOPPER, TRIMMER & STRETCHER SCREEN -->
+          <div id="view-chopper" class="screen-view hidden flex-col h-full justify-between gap-2">
+            <div class="flex flex-wrap items-center justify-between gap-1.5">
+              <div class="flex items-center gap-1.5">
+                <button id="btnAutoChop" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold mono">
+                  Auto-Transient Chop (16)
+                </button>
+                <button id="btnGridChop8" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs mono border border-slate-700">
+                  Grid Slice (8)
+                </button>
+                <button id="btnLazyChop" class="px-2.5 py-1 rounded bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 text-xs mono border border-amber-600/50">
+                  Lazy Chop: Tap Pads
+                </button>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button id="btnSendSliceToGrain" class="px-2.5 py-1 rounded bg-cyan-700 hover:bg-cyan-600 text-white text-xs mono font-semibold">
+                  Granularize Selected Slice →
+                </button>
+              </div>
+            </div>
+
+            <div class="relative h-32 w-full bg-slate-900/80 rounded border border-slate-800 overflow-hidden">
+              <canvas id="canvasChopperWave" class="w-full h-full block"></canvas>
+              <div class="absolute top-1.5 right-2 text-[11px] mono text-emerald-300 bg-slate-950/80 px-2 py-0.5 rounded" id="lblChopInfo">
+                Slice #1 | Start: 0% | End: 12% | Stretch: 100% | Pitch: +0 st
+              </div>
+            </div>
+
+            <div class="text-xs text-slate-400 mono flex items-center justify-between px-1">
+              <span>Knobs 1–4 control active Slice: <b>Start Trim</b>, <b>End Trim</b>, <b>Time-Stretch Ratio</b>, <b>Slice Pitch</b></span>
+              <button id="btnAuditionSlice" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700">
+                Audition Slice
+              </button>
+            </div>
+          </div>
+
+          <!-- VIEW 4: 64-STEP SEQUENCER, CHORD & ARPEGGIATOR SCREEN -->
+          <div id="view-sequencer" class="screen-view hidden flex-col h-full justify-between gap-2">
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div class="flex items-center gap-1.5">
+                <span class="font-bold text-purple-400 mono">STEP GRID (1–16):</span>
+                <span class="text-slate-400">Click step to toggle, select step & turn Knobs 1–4 for Pitch, Vel, Length & Ratchet</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button id="btnClearPattern" class="px-2 py-0.5 rounded bg-rose-900/50 hover:bg-rose-800 text-rose-200 border border-rose-700/50 mono text-xs">
+                  Clear Track
+                </button>
+              </div>
+            </div>
+
+            <!-- 16-Step Visual Sequencer Grid -->
+            <div id="seqGridContainer" class="grid grid-cols-8 sm:grid-cols-16 gap-1 my-1">
+              <!-- Populated dynamically by JS -->
+            </div>
+
+            <!-- Selected Step Inspector & Arpeggiator Bar -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-900/90 p-2 rounded border border-slate-800 text-xs mono">
+              <div id="lblSelectedStepInfo" class="text-amber-300 flex items-center justify-between">
+                <span>EDIT STEP 1: Note C4 (60) | Vel 100 | Len 1.0 | Ratchet 1x</span>
+              </div>
+              <div class="flex items-center justify-end gap-2">
+                <span class="text-cyan-400 font-bold">ARP:</span>
+                <select id="selArpMode" aria-label="Arpeggiator Mode" class="bg-slate-800 text-white rounded px-1.5 py-0.5 border border-slate-700">
+                  <option value="Off" selected>Arp: OFF</option>
+                  <option value="Up">Arp: UP</option>
+                  <option value="Down">Arp: DOWN</option>
+                  <option value="UpDown">Arp: UP/DOWN</option>
+                  <option value="Converge">Arp: CONVERGE</option>
+                  <option value="PinkyThumb">Arp: PEDAL ROOT</option>
+                  <option value="ChordRepeat">Arp: CHORD REPEAT</option>
+                </select>
+                <select id="selArpOct" aria-label="Arpeggiator Octaves" class="bg-slate-800 text-white rounded px-1.5 py-0.5 border border-slate-700">
+                  <option value="1">1 Oct</option>
+                  <option value="2" selected>2 Oct</option>
+                  <option value="3">3 Oct</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Screen Bottom Readout: Live 4-Knob Parameter Value Bar -->
+        <div class="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-slate-800/80 text-center">
+          <div class="bg-slate-900/90 rounded px-2 py-1 border border-slate-800">
+            <div id="lblKnob1Title" class="text-[10px] text-slate-400 uppercase mono truncate">KNOB 1: OP1 RATIO</div>
+            <div id="lblKnob1Val" class="text-xs sm:text-sm font-bold text-orange-400 mono">1.00x</div>
+          </div>
+          <div class="bg-slate-900/90 rounded px-2 py-1 border border-slate-800">
+            <div id="lblKnob2Title" class="text-[10px] text-slate-400 uppercase mono truncate">KNOB 2: OP2 RATIO</div>
+            <div id="lblKnob2Val" class="text-xs sm:text-sm font-bold text-orange-400 mono">2.00x</div>
+          </div>
+          <div class="bg-slate-900/90 rounded px-2 py-1 border border-slate-800">
+            <div id="lblKnob3Title" class="text-[10px] text-slate-400 uppercase mono truncate">KNOB 3: OP3 RATIO</div>
+            <div id="lblKnob3Val" class="text-xs sm:text-sm font-bold text-orange-400 mono">1.00x</div>
+          </div>
+          <div class="bg-slate-900/90 rounded px-2 py-1 border border-slate-800">
+            <div id="lblKnob4Title" class="text-[10px] text-slate-400 uppercase mono truncate">KNOB 4: OP4 RATIO</div>
+            <div id="lblKnob4Val" class="text-xs sm:text-sm font-bold text-orange-400 mono">3.00x</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Capacitive Touch Strip + Pad Bank Mode Selector Row -->
+      <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center bg-slate-900/75 p-2.5 rounded-xl border border-slate-800">
+        <div class="sm:col-span-5 flex flex-col gap-1">
+          <div class="flex items-center justify-between text-[11px] mono text-slate-300">
+            <span>TOUCH STRIP (MACRO / GRAIN SCRUB)</span>
+            <span id="lblTouchStripVal" class="text-cyan-400 font-bold">50%</span>
+          </div>
+          <input id="sliderTouchStrip" type="range" min="0" max="100" value="50" aria-label="Touch Strip Macro" class="w-full h-3 rounded-lg touch-strip cursor-pointer" />
+        </div>
+
+        <div class="sm:col-span-7 flex flex-wrap items-center justify-end gap-1.5">
+          <span class="text-xs text-slate-400 mono mr-1">16-PAD MODE:</span>
+          <button data-padmode="chord" class="pad-mode-btn px-2.5 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-bold mono shadow">
+            1-PAD CHORDS (12+4)
+          </button>
+          <button data-padmode="slices" class="pad-mode-btn px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold mono border border-slate-700">
+            SAMPLE SLICES / DRUMS
+          </button>
+          <button data-padmode="steps" class="pad-mode-btn px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold mono border border-slate-700">
+            16-STEP TRIGGERS
+          </button>
+        </div>
+      </div>
+
+      <!-- 16 Velocity-Sensitive RGB Performance Pads (4x4 MPC Layout: Row 4 at top, Row 1 at bottom) -->
+      <div id="padGrid" class="grid grid-cols-4 gap-2.5 sm:gap-3">
+        <!-- Generated dynamically by JS in standard MPC order: Top row = Pads 13..16, Bottom row = Pads 1..4 -->
+      </div>
+
+    </section>
+
+    <!-- RIGHT COLUMN: 4 Physical Rotary Knobs, Jog Wheel, Track Select, AI Gesture Sensor & Transport (Cols 9-12) -->
+    <aside class="lg:col-span-4 flex flex-col justify-between gap-4 bg-slate-900/60 rounded-xl p-3.5 border border-slate-800/90">
+
+      <!-- AI Camera Gesture Sensor Simulation -->
+      <div class="bg-slate-950/90 rounded-xl p-2.5 border border-slate-800 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-full bg-slate-900 border-2 border-cyan-500/60 flex items-center justify-center relative">
+            <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping absolute"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-cyan-300 relative"></span>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-slate-200 mono">AI GESTURE CAMERA</div>
+            <div class="text-[11px] text-slate-400">Modulates Filter & Grain Pos</div>
+          </div>
+        </div>
+        <input id="sliderAiGesture" type="range" min="0" max="100" value="0" aria-label="AI Camera Hand Distance" class="w-28" />
+      </div>
+
+      <!-- 4 Assignable Physical Q-Link Rotary Encoders -->
+      <div class="bg-slate-950/80 rounded-xl p-3 border border-slate-800 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-300 uppercase mono tracking-wider">4 Assignable Hardware Knobs</span>
+          <label class="flex items-center gap-1.5 text-xs text-amber-300 mono cursor-pointer">
+            <input id="chkPushTurn" type="checkbox" class="rounded bg-slate-900 border-slate-700" />
+            Push+Turn (Fine/Ratchet)
+          </label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 flex flex-col gap-1">
+            <div class="flex justify-between text-xs mono">
+              <span id="hwKnob1Label" class="text-slate-300 font-semibold">1. Op1 Ratio</span>
+              <span id="hwKnob1Readout" class="text-orange-400 font-bold">1.0x</span>
+            </div>
+            <input id="knob1" type="range" min="0" max="100" value="25" aria-label="Hardware Knob 1" class="w-full cursor-pointer" />
+          </div>
+
+          <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 flex flex-col gap-1">
+            <div class="flex justify-between text-xs mono">
+              <span id="hwKnob2Label" class="text-slate-300 font-semibold">2. Op2 Ratio</span>
+              <span id="hwKnob2Readout" class="text-orange-400 font-bold">2.0x</span>
+            </div>
+            <input id="knob2" type="range" min="0" max="100" value="40" aria-label="Hardware Knob 2" class="w-full cursor-pointer" />
+          </div>
+
+          <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 flex flex-col gap-1">
+            <div class="flex justify-between text-xs mono">
+              <span id="hwKnob3Label" class="text-slate-300 font-semibold">3. Op3 Ratio</span>
+              <span id="hwKnob3Readout" class="text-orange-400 font-bold">1.0x</span>
+            </div>
+            <input id="knob3" type="range" min="0" max="100" value="25" aria-label="Hardware Knob 3" class="w-full cursor-pointer" />
+          </div>
+
+          <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 flex flex-col gap-1">
+            <div class="flex justify-between text-xs mono">
+              <span id="hwKnob4Label" class="text-slate-300 font-semibold">4. Op4 Ratio</span>
+              <span id="hwKnob4Readout" class="text-orange-400 font-bold">3.0x</span>
+            </div>
+            <input id="knob4" type="range" min="0" max="100" value="55" aria-label="Hardware Knob 4" class="w-full cursor-pointer" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Jog Wheel & Track Selection Matrix -->
+      <div class="bg-slate-950/80 rounded-xl p-3 border border-slate-800 flex flex-col gap-2.5">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-300 uppercase mono">Active Track / Synth Engine</span>
+          <div class="flex items-center gap-1">
+            <button id="btnJogPrev" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-xs mono border border-slate-700">◀ JOG</button>
+            <button id="btnJogNext" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-xs mono border border-slate-700">JOG ▶</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <button data-track="0" class="track-btn py-2 px-2.5 rounded-lg bg-orange-600 text-white text-xs font-bold mono text-left flex items-center justify-between">
+            <span>TRK 1: 4-OP FM</span>
+            <span class="w-2 h-2 rounded-full bg-white"></span>
+          </button>
+          <button data-track="1" class="track-btn py-2 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold mono text-left border border-slate-800 flex items-center justify-between">
+            <span>TRK 2: GRANULAR</span>
+            <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+          </button>
+          <button data-track="2" class="track-btn py-2 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold mono text-left border border-slate-800 flex items-center justify-between">
+            <span>TRK 3: CHOPPER</span>
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          </button>
+          <button data-track="3" class="track-btn py-2 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold mono text-left border border-slate-800 flex items-center justify-between">
+            <span>TRK 4: FM SUB/DRUM</span>
+            <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Chord Modifier Status & Master Transport Controls -->
+      <div class="bg-slate-950/90 rounded-xl p-3 border border-slate-800 flex flex-col gap-3">
+        <div class="flex items-center justify-between text-xs mono">
+          <span class="text-slate-400">CHORD MODS (PADS 13–16):</span>
+          <span id="lblChordModsStatus" class="text-cyan-400 font-bold">Triad | Root Inv | Latch OFF</span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <button id="btnPlay" class="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm mono shadow-lg flex items-center justify-center gap-1.5">
+            ▶ PLAY
+          </button>
+          <button id="btnStop" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm mono border border-slate-700 flex items-center justify-center gap-1.5">
+            ■ STOP
+          </button>
+          <button id="btnRec" class="py-2.5 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-300 font-bold text-xs sm:text-sm mono border border-rose-800 flex items-center justify-center gap-1.5">
+            ● REC PAD
+          </button>
+        </div>
+
+        <div class="text-[11px] text-slate-400 leading-relaxed">
+          <b>Keyboard Shortcuts:</b> Keys <code class="text-slate-200 bg-slate-800 px-1 rounded">1 2 3 4</code> (Pads 13–16), <code class="text-slate-200 bg-slate-800 px-1 rounded">Q W E R</code> (Pads 9–12), <code class="text-slate-200 bg-slate-800 px-1 rounded">A S D F</code> (Pads 5–8), <code class="text-slate-200 bg-slate-800 px-1 rounded">Z X C V</code> (Pads 1–4), <code class="text-slate-200 bg-slate-800 px-1 rounded">Space</code> Play/Stop.
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <script>
+    // =========================================================================
+    // BEHRINGER KICK (0700-AAM) VIRTUAL FIRMWARE ENGINE (WebAudio + Sequencer)
+    // =========================================================================
+
+    const SCALES = {
+      NaturalMinor:  [0, 2, 3, 5, 7, 8, 10],
+      Major:         [0, 2, 4, 5, 7, 9, 11],
+      Dorian:        [0, 2, 3, 5, 7, 9, 10],
+      Phrygian:      [0, 1, 3, 5, 7, 8, 10],
+      Lydian:        [0, 2, 4, 6, 7, 9, 11],
+      Mixolydian:    [0, 2, 4, 5, 7, 9, 10],
+      HarmonicMinor: [0, 2, 3, 5, 7, 8, 11]
+    };
+
+    const NOTE_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+    function midiToName(midi) {
+      const n = Math.max(0, Math.min(127, Math.round(midi)));
+      return NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 1);
+    }
+
+    function midiToFreq(midi) {
+      return 440 * Math.pow(2, (midi - 69) / 12);
+    }
+
+    // Global Firmware State mirroring kick_custom_firmware_core.hpp
+    const state = {
+      audioCtx: null,
+      muted: false,
+      playing: false,
+      recording: false,
+      bpm: 118,
+      currentStep: 0,
+      selectedStep: 0,
+      activeScreen: 'fm',       // 'fm' | 'granular' | 'chopper' | 'sequencer'
+      activeTrack: 0,           // 0: 4-Op FM, 1: Granular, 2: Chopper, 3: FM Sub/Drum
+      padMode: 'chord',         // 'chord' | 'slices' | 'steps'
+      rootMidi: 60,             // C4
+      scaleType: 'NaturalMinor',
+      quantizeMode: 'Smart75',
+
+      // Chord Modifiers (Pads 13-16)
+      chordMods: {
+        add7th9th: false,
+        sus4Toggle: false,
+        inversion: 0,
+        arpLatch: false
+      },
+
+      // Arpeggiator State
+      arp: {
+        mode: 'Off',
+        octaves: 2,
+        heldNotes: [],
+        cursor: 0
+      },
+
+      // 4-Op FM Engine State (AudIO::FM4Patch)
+      fmBank: 0,
+      fmPatch: {
+        algorithm: 4,
+        ratios: [1.0, 2.0, 1.0, 3.0],
+        detunes: [0, 3, -3, 0],
+        levels: [0.90, 0.45, 0.70, 0.35],
+        modAttack: 0.008,
+        modDecay: 0.35,
+        carAttack: 0.005,
+        carRelease: 0.40,
+        op4Feedback: 0.25,
+        sampleFMDepth: 0.0,
+        waveMorph: 0.15,
+        cutoffHz: 6800,
+        resonance: 2.5,
+        drive: 0.15
+      },
+
+      // Sample-Coupled Granular State (AudIO::GranularParams)
+      grainBank: 0,
+      grainSource: 'chord',
+      grainFreeze: false,
+      grain: {
+        position: 0.28,
+        grainSizeMs: 95,
+        densityHz: 22,
+        pitchSemi: 0,
+        posSpray: 0.08,
+        pitchSpray: 0.20,
+        windowMorph: 0.50,
+        reverseProb: 0.15
+      },
+      activeGrainsVisual: [],
+
+      // Sample Chopper & Stretcher State
+      selectedSlice: 0,
+      lazyChopCursor: 0,
+      slices: Array.from({ length: 16 }, (_, i) => ({
+        start: i / 16,
+        end: (i + 1) / 16,
+        stretch: 1.0,
+        pitchSemi: 0
+      })),
+
+      // 4-Track 16-Step Sequencer
+      tracks: Array.from({ length: 4 }, (_, tIdx) => ({
+        name: ['4-OP FM', 'GRANULAR', 'CHOPPER', 'FM SUB/DRUM'][tIdx],
+        steps: Array.from({ length: 16 }, () => ({
+          enabled: false,
+          notes: [tIdx === 3 ? 36 : 60],
+          velocity: 100,
+          lengthSteps: 1.0,
+          microtiming: 0,
+          ratchet: 1,
+          label: ''
+        }))
+      })),
+
+      // Pre-synthesized in-memory audio buffers for zero-copy Granular & Chopper
+      buffers: {},
+      scopeSamples: new Float32Array(256)
+    };
+
+    // =========================================================================
+    // AUDIO INITIALIZATION & IN-MEMORY SAMPLE BUFFER SYNTHESIS
+    // =========================================================================
+
+    function ensureAudio() {
+      if (!state.audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        state.audioCtx = new AudioContextClass();
+        buildSampleBuffers();
+      }
+      if (state.audioCtx.state === 'suspended') {
+        state.audioCtx.resume();
+      }
+      const dot = document.getElementById('audioDot');
+      const txt = document.getElementById('audioStatusText');
+      if (dot && txt) {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-300';
+        txt.textContent = 'Audio Engine Running (48kHz)';
+      }
+    }
+
+    function buildSampleBuffers() {
+      const ctx = state.audioCtx;
+      const sr = ctx.sampleRate;
+      const len = sr * 2; // 2.0 seconds per buffer
+
+      // 1. Resampled FM Lush Chord Buffer
+      const chordBuf = ctx.createBuffer(1, len, sr);
+      const cd = chordBuf.getChannelData(0);
+      const freqs = [261.63, 311.13, 392.00, 466.16, 587.33]; // Cm9
+      for (let i = 0; i < len; i++) {
+        const t = i / sr;
+        let s = 0;
+        for (let f of freqs) {
+          const mod = Math.sin(2 * Math.PI * (f * 2.01) * t) * (0.6 * Math.exp(-t * 1.5));
+          s += Math.sin(2 * Math.PI * f * t + mod) * 0.18;
+        }
+        cd[i] = s * Math.exp(-t * 0.4);
+      }
+      state.buffers.chord = chordBuf;
+
+      // 2. Synthetic Breakbeat Drum Loop Buffer (16 transient hits across 2 seconds)
+      const breakBuf = ctx.createBuffer(1, len, sr);
+      const bd = breakBuf.getChannelData(0);
+      const stepLen = Math.floor(len / 16);
+      // Pattern: K, H, S, H, K, K, S, H, K, H, S, H, K, S, H, S
+      const pattern = ['K','H','S','H','K','K','S','H','K','H','S','H','K','S','H','S'];
+      for (let step = 0; step < 16; step++) {
+        const type = pattern[step];
+        const offset = step * stepLen;
+        for (let j = 0; j < stepLen; j++) {
+          const t = j / sr;
+          let v = 0;
+          if (type === 'K') {
+            const f = 52 + 130 * Math.exp(-t * 38);
+            v = Math.sin(2 * Math.PI * f * t) * Math.exp(-t * 9);
+          } else if (type === 'S') {
+            const noise = (Math.random() * 2 - 1) * Math.exp(-t * 18);
+            const body = Math.sin(2 * Math.PI * 185 * t) * Math.exp(-t * 22);
+            v = 0.65 * noise + 0.5 * body;
+          } else {
+            v = (Math.random() * 2 - 1) * Math.exp(-t * 45) * 0.45;
+          }
+          bd[offset + j] = Math.tanh(v * 1.4);
+        }
+      }
+      state.buffers.break = breakBuf;
+
+      // 3. Formant Vocal Texture Buffer
+      const vocalBuf = ctx.createBuffer(1, len, sr);
+      const vd = vocalBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) {
+        const t = i / sr;
+        const f0 = 130.81 * (1 + 0.008 * Math.sin(2 * Math.PI * 5.5 * t));
+        const f1 = 720 + 250 * Math.sin(2 * Math.PI * 0.8 * t);
+        const f2 = 1240 + 300 * Math.cos(2 * Math.PI * 0.6 * t);
+        const carrier = Math.sin(2 * Math.PI * f0 * t);
+        const formants = 0.5 * Math.sin(2 * Math.PI * f1 * t) + 0.35 * Math.sin(2 * Math.PI * f2 * t);
+        vd[i] = Math.tanh((carrier + formants * (0.5 + 0.5 * carrier)) * 0.6);
+      }
+      state.buffers.vocal = vocalBuf;
+    }
+
+    // =========================================================================
+    // 1. 4-OPERATOR FM VOICE SYNTHESIS (AudIO::FM4Voice)
+    // =========================================================================
+
+    function triggerFM4Notes(midiNotes, velocity = 100, durationSec = 0.35, isSubTrack = false) {
+      ensureAudio();
+      if (state.muted) return;
+      const ctx = state.audioCtx;
+      const now = ctx.currentTime;
+      const p = state.fmPatch;
+      const velGain = (velocity / 127) * (isSubTrack ? 0.38 : 0.24) / Math.max(1, Math.sqrt(midiNotes.length));
+
+      // Update scope visualization buffer
+      updateFmScopeBuffer(midiNotes[0] || 60);
+
+      midiNotes.forEach((note, idx) => {
+        const strumDelay = state.chordMods.arpLatch && midiNotes.length > 1 ? idx * 0.018 : 0;
+        const t0 = now + strumDelay;
+        const baseFreq = midiToFreq(note);
+
+        // Filter & Master Gain
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        const gestureBoost = Number(document.getElementById('sliderAiGesture').value) * 60;
+        filter.frequency.setValueAtTime(Math.min(18000, p.cutoffHz + gestureBoost), t0);
+        filter.Q.setValueAtTime(p.resonance, t0);
+
+        const outGain = ctx.createGain();
+        outGain.gain.setValueAtTime(0.0001, t0);
+        outGain.gain.linearRampToValueAtTime(velGain * p.levels[0], t0 + p.carAttack);
+        outGain.gain.exponentialRampToValueAtTime(0.0001, t0 + durationSec + p.carRelease);
+
+        filter.connect(outGain);
+        outGain.connect(ctx.destination);
+
+        // Create 4 Operators
+        const ops = [0, 1, 2, 3].map(opIdx => {
+          const osc = ctx.createOscillator();
+          const types = ['sine', 'triangle', 'sawtooth', 'square'];
+          osc.type = types[Math.min(3, Math.floor(p.waveMorph * 3.99))];
+          const ratio = isSubTrack && opIdx === 0 ? 0.5 : p.ratios[opIdx];
+          const detuneFactor = Math.pow(2, p.detunes[opIdx] / 1200);
+          osc.frequency.setValueAtTime(baseFreq * ratio * detuneFactor, t0);
+
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          osc.start(t0);
+          osc.stop(t0 + durationSec + p.carRelease + 0.05);
+          return { osc, gain, freq: baseFreq * ratio };
+        });
+
+        // Modulator Envelopes
+        [1, 2, 3].forEach(opIdx => {
+          const modIndexHz = ops[opIdx].freq * p.levels[opIdx] * 3.2;
+          ops[opIdx].gain.gain.setValueAtTime(0.01, t0);
+          ops[opIdx].gain.gain.linearRampToValueAtTime(modIndexHz, t0 + p.modAttack);
+          ops[opIdx].gain.gain.exponentialRampToValueAtTime(Math.max(1, modIndexHz * 0.15), t0 + p.modAttack + p.modDecay);
+        });
+
+        // Carrier Gain
+        ops[0].gain.gain.setValueAtTime(1.0, t0);
+
+        // Route according to selected 4-Operator Algorithm
+        const alg = p.algorithm;
+        if (alg === 0) {
+          // 4 -> 3 -> 2 -> 1
+          ops[3].gain.connect(ops[2].osc.frequency);
+          ops[2].gain.connect(ops[1].osc.frequency);
+          ops[1].gain.connect(ops[0].osc.frequency);
+          ops[0].gain.connect(filter);
+        } else if (alg === 1) {
+          // (3 + 4) -> 2 -> 1
+          ops[3].gain.connect(ops[1].osc.frequency);
+          ops[2].gain.connect(ops[1].osc.frequency);
+          ops[1].gain.connect(ops[0].osc.frequency);
+          ops[0].gain.connect(filter);
+        } else if (alg === 2) {
+          // (4 -> 3 -> 1) + (2 -> 1)
+          ops[3].gain.connect(ops[2].osc.frequency);
+          ops[2].gain.connect(ops[0].osc.frequency);
+          ops[1].gain.connect(ops[0].osc.frequency);
+          ops[0].gain.connect(filter);
+        } else if (alg === 3) {
+          // (2 + 3 + 4) -> 1
+          ops[3].gain.connect(ops[0].osc.frequency);
+          ops[2].gain.connect(ops[0].osc.frequency);
+          ops[1].gain.connect(ops[0].osc.frequency);
+          ops[0].gain.connect(filter);
+        } else if (alg === 4) {
+          // (4 -> 3) + (2 -> 1) Dual 2-op stacks
+          ops[3].gain.connect(ops[2].osc.frequency);
+          ops[1].gain.connect(ops[0].osc.frequency);
+          ops[2].gain.gain.setValueAtTime(0.6, t0);
+          ops[0].gain.connect(filter);
+          ops[2].gain.connect(filter);
+        } else if (alg === 5) {
+          // 4 -> (1 + 2 + 3)
+          ops[3].gain.connect(ops[0].osc.frequency);
+          ops[3].gain.connect(ops[1].osc.frequency);
+          ops[3].gain.connect(ops[2].osc.frequency);
+          ops[1].gain.gain.setValueAtTime(0.45, t0);
+          ops[2].gain.gain.setValueAtTime(0.45, t0);
+          ops[0].gain.connect(filter);
+          ops[1].gain.connect(filter);
+          ops[2].gain.connect(filter);
+        } else if (alg === 6) {
+          // (4 -> 3) + 2 + 1
+          ops[3].gain.connect(ops[2].osc.frequency);
+          ops[1].gain.gain.setValueAtTime(0.45, t0);
+          ops[2].gain.gain.setValueAtTime(0.45, t0);
+          ops[0].gain.connect(filter);
+          ops[1].gain.connect(filter);
+          ops[2].gain.connect(filter);
+        } else {
+          // Alg 8: 1 + 2 + 3 + 4 parallel
+          [0, 1, 2, 3].forEach(i => {
+            ops[i].gain.gain.setValueAtTime(0.35 * p.levels[i], t0);
+            ops[i].gain.connect(filter);
+          });
+        }
+
+        // Optional Sample-FM transient phase modulation into Op 1 & Op 4
+        if (p.sampleFMDepth > 0.01 && state.buffers.break) {
+          const sSrc = ctx.createBufferSource();
+          sSrc.buffer = state.buffers.break;
+          const sGain = ctx.createGain();
+          sGain.gain.setValueAtTime(p.sampleFMDepth * 1400, t0);
+          sSrc.connect(sGain);
+          sGain.connect(ops[0].osc.frequency);
+          sSrc.start(t0, 0, Math.min(0.25, durationSec));
+        }
+      });
+    }
+
+    function updateFmScopeBuffer(midiNote) {
+      const p = state.fmPatch;
+      const len = state.scopeSamples.length;
+      for (let i = 0; i < len; i++) {
+        const ph = (i / len) * Math.PI * 4;
+        const op4 = Math.sin(ph * p.ratios[3] + p.op4Feedback * Math.sin(ph * p.ratios[3])) * p.levels[3] * 3.0;
+        const op3 = Math.sin(ph * p.ratios[2] + op4) * p.levels[2] * 2.5;
+        const op2 = Math.sin(ph * p.ratios[1] + (p.algorithm < 2 ? op3 : 0)) * p.levels[1] * 2.5;
+        let out = Math.sin(ph * p.ratios[0] + op2);
+        if (p.waveMorph > 0.1) {
+          out = Math.tanh(out * (1 + p.waveMorph * 3));
+        }
+        state.scopeSamples[i] = out * p.levels[0];
+      }
+      drawActiveScreenCanvas();
+    }
+
+    // =========================================================================
+    // 2. SAMPLE-COUPLED GRANULAR CLOUD SYNTHESIS (AudIO::GranularVoice)
+    // =========================================================================
+
+    function triggerGranularCloud(midiNotes, velocity = 100) {
+      ensureAudio();
+      if (state.muted) return;
+      const ctx = state.audioCtx;
+      const buf = state.buffers[state.grainSource] || state.buffers.chord;
+      if (!buf) return;
+
+      const g = state.grain;
+      const numGrains = Math.min(14, Math.max(4, Math.round(g.densityHz * 0.45)));
+      const now = ctx.currentTime;
+
+      midiNotes.forEach(note => {
+        const baseSemi = (note - 60) + g.pitchSemi;
+        for (let i = 0; i < numGrains; i++) {
+          const spawnOffset = (i / numGrains) * 0.28 + Math.random() * 0.03;
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+
+          let shimmer = 0;
+          if (Math.random() < g.pitchSpray) {
+            shimmer = Math.random() < 0.5 ? 7 : 12;
+          }
+          src.playbackRate.value = Math.pow(2, (baseSemi + shimmer) / 12);
+
+          const env = ctx.createGain();
+          const panner = ctx.createStereoPanner();
+          panner.pan.value = (Math.random() * 2 - 1) * 0.75;
+
+          const durSec = Math.max(0.015, g.grainSizeMs / 1000);
+          const spray = (Math.random() * 2 - 1) * g.posSpray;
+          const normPos = Math.max(0.02, Math.min(0.92, g.position + spray));
+          const offsetSec = normPos * buf.duration;
+
+          const peakGain = (velocity / 127) * 0.26 / Math.sqrt(midiNotes.length);
+          const tStart = now + spawnOffset;
+          const attackRatio = g.windowMorph < 0.3 ? 0.08 : 0.45;
+
+          env.gain.setValueAtTime(0.0001, tStart);
+          env.gain.linearRampToValueAtTime(peakGain, tStart + durSec * attackRatio);
+          env.gain.exponentialRampToValueAtTime(0.0001, tStart + durSec);
+
+          src.connect(env);
+          env.connect(panner);
+          panner.connect(ctx.destination);
+          src.start(tStart, offsetSec, durSec + 0.02);
+
+          // Push visual grain particle for 7" screen animation
+          state.activeGrainsVisual.push({
+            x: normPos,
+            y: 0.2 + Math.random() * 0.6,
+            size: Math.max(4, Math.min(26, g.grainSizeMs * 0.12)),
+            born: performance.now(),
+            lifeMs: durSec * 1000 + spawnOffset * 1000
+          });
+        }
+      });
+      drawActiveScreenCanvas();
+    }
+
+    // =========================================================================
+    // 3. SAMPLE CHOPPER / SLICER PLAYBACK (AudIO::SampleChopper)
+    // =========================================================================
+
+    function triggerSampleSlice(sliceIdx, velocity = 110) {
+      ensureAudio();
+      if (state.muted) return;
+      const ctx = state.audioCtx;
+      const buf = state.buffers.break;
+      if (!buf) return;
+
+      const sIdx = ((sliceIdx % 16) + 16) % 16;
+      state.selectedSlice = sIdx;
+      const sl = state.slices[sIdx];
+
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const rate = Math.pow(2, sl.pitchSemi / 12) / Math.max(0.25, sl.stretch);
+      src.playbackRate.value = rate;
+
+      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+      const startSec = sl.start * buf.duration;
+      const sliceDur = Math.max(0.02, (sl.end - sl.start) * buf.duration / rate);
+
+      gain.gain.setValueAtTime((velocity / 127) * 0.7, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + sliceDur);
+
+      src.connect(gain);
+      gain.connect(ctx.destination);
+      src.start(now, startSec, sliceDur);
+
+      updateKnobLabelsAndReadouts();
+      drawActiveScreenCanvas();
+    }
+
+    // =========================================================================
+    // 4. 16-PAD SCALE & CHORD PROGRESSION ENGINE (Kick::ChordScaleEngine)
+    // =========================================================================
+
+    function getChordForPad(padIdx) {
+      // Pads 0..11 are chord pads; Pads 12..15 are live modifier pads
+      const intervals = SCALES[state.scaleType] || SCALES.NaturalMinor;
+      const root = state.rootMidi;
+      const mods = state.chordMods;
+
+      const degToPitch = (deg) => {
+        const oct = Math.floor(deg / 7);
+        const d = ((deg % 7) + 7) % 7;
+        return root + oct * 12 + intervals[d];
+      };
+
+      let notes = [];
+      let label = '';
+      const romanMinor = ['i', 'ii°', 'bIII', 'iv', 'v', 'bVI', 'bVII'];
+      const romanMajor = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+      const romans = state.scaleType === 'Major' || state.scaleType === 'Lydian' || state.scaleType === 'Mixolydian' ? romanMajor : romanMinor;
+
+      if (padIdx < 7) {
+        notes.push(degToPitch(padIdx));
+        notes.push(degToPitch(padIdx + (mods.sus4Toggle ? 3 : 2)));
+        notes.push(degToPitch(padIdx + 4));
+        if (mods.add7th9th) {
+          notes.push(degToPitch(padIdx + 6));
+          notes.push(degToPitch(padIdx + 8));
+        }
+        label = `${romans[padIdx]} (${midiToName(notes[0])}${mods.add7th9th ? '9' : ''}${mods.sus4Toggle ? 'sus' : ''})`;
+      } else if (padIdx === 7) {
+        notes = [root + 12, root + 12 + intervals[2], root + 12 + intervals[4], root + 26];
+        label = `i9 High (${midiToName(root + 12)}9)`;
+      } else if (padIdx === 8) {
+        notes = [root + 5, root + 9, root + 12, root + 16];
+        label = `IV Maj7 (${midiToName(root + 5)}M7)`;
+      } else if (padIdx === 9) {
+        notes = [root + 7, root + 11, root + 14, root + 17];
+        label = `V7 Dom (${midiToName(root + 7)}7)`;
+      } else if (padIdx === 10) {
+        notes = [root + 1, root + 5, root + 8, root + 12];
+        label = `bII Maj7 (${midiToName(root + 1)}M7)`;
+      } else if (padIdx === 11) {
+        notes = [root, root + 4, root + 7, root + 10];
+        label = `V7/iv (${midiToName(root)}7)`;
+      }
+
+      for (let inv = 0; inv < (mods.inversion % 3); inv++) {
+        notes[0] += 12;
+        notes.sort((a, b) => a - b);
+      }
+      return { notes, label };
+    }
+
+    // =========================================================================
+    // 5. PAD TRIGGER ROUTER & LIVE SEQUENCER RECORDING
+    // =========================================================================
+
+    function triggerHardwarePad(padIdx) {
+      ensureAudio();
+
+      // Visual pad flash
+      const padEl = document.querySelector(`[data-pad="${padIdx}"]`);
+      if (padEl) {
+        padEl.classList.add('pad-active', 'ring-2', 'ring-white');
+        setTimeout(() => padEl.classList.remove('pad-active', 'ring-2', 'ring-white'), 140);
+      }
+
+      if (state.padMode === 'chord') {
+        // Pads 12..15 (Top Row Pads 13..16) are live Chord Modifiers
+        if (padIdx === 12) {
+          state.chordMods.add7th9th = !state.chordMods.add7th9th;
+          renderPads();
+          updateChordModStatus();
+          return;
+        } else if (padIdx === 13) {
+          state.chordMods.sus4Toggle = !state.chordMods.sus4Toggle;
+          renderPads();
+          updateChordModStatus();
+          return;
+        } else if (padIdx === 14) {
+          state.chordMods.inversion = (state.chordMods.inversion + 1) % 3;
+          renderPads();
+          updateChordModStatus();
+          return;
+        } else if (padIdx === 15) {
+          state.chordMods.arpLatch = !state.chordMods.arpLatch;
+          if (!state.chordMods.arpLatch) state.arp.heldNotes = [];
+          renderPads();
+          updateChordModStatus();
+          return;
+        }
+
+        const chord = getChordForPad(padIdx);
+        state.arp.heldNotes = chord.notes.slice();
+        playNotesOnActiveTrack(chord.notes, 110, 0.40, padIdx);
+
+        if (state.recording) {
+          recordNotesToCurrentStep(chord.notes, chord.label);
+        }
+      } else if (state.padMode === 'slices') {
+        if (state.lazyChopCursor > 0 && state.activeScreen === 'chopper') {
+          // Drop lazy chop marker
+          const prevEnd = state.slices[Math.max(0, padIdx - 1)].end;
+          state.slices[padIdx].start = prevEnd;
+          state.slices[padIdx].end = Math.min(1.0, prevEnd + 0.08);
+        }
+        triggerSampleSlice(padIdx, 115);
+        if (state.recording) {
+          recordNotesToCurrentStep([36 + padIdx], `Slice #${padIdx + 1}`);
+        }
+      } else if (state.padMode === 'steps') {
+        // Toggle or select step 1..16
+        const trk = state.tracks[state.activeTrack];
+        state.selectedStep = padIdx;
+        trk.steps[padIdx].enabled = !trk.steps[padIdx].enabled;
+        renderSequencerGrid();
+        renderPads();
+        updateKnobLabelsAndReadouts();
+      }
+    }
+
+    function playNotesOnActiveTrack(notes, velocity, durSec, sliceIndexFallback = 0) {
+      if (state.activeTrack === 0) {
+        triggerFM4Notes(notes, velocity, durSec, false);
+      } else if (state.activeTrack === 1) {
+        triggerGranularCloud(notes, velocity);
+      } else if (state.activeTrack === 2) {
+        triggerSampleSlice(sliceIndexFallback, velocity);
+      } else {
+        triggerFM4Notes([notes[0] - 12], velocity, durSec * 0.8, true);
+      }
+    }
+
+    function recordNotesToCurrentStep(notes, label) {
+      const trk = state.tracks[state.activeTrack];
+      const stepIdx = state.currentStep % 16;
+      const st = trk.steps[stepIdx];
+      st.enabled = true;
+      st.notes = notes.slice();
+      st.velocity = 112;
+      st.label = label || midiToName(notes[0]);
+      st.microtiming = state.quantizeMode === 'Snap100' ? 0 : (state.quantizeMode === 'Smart75' ? 2 : 7);
+      state.selectedStep = stepIdx;
+      renderSequencerGrid();
+      if (state.padMode === 'steps') renderPads();
+    }
+
+    // =========================================================================
+    // 6. SEQUENCER & ARPEGGIATOR MASTER CLOCK LOOP
+    // =========================================================================
+
+    let clockTimer = null;
+
+    function startSequencer() {
+      ensureAudio();
+      if (state.playing) return;
+      state.playing = true;
+      document.getElementById('btnPlay').classList.replace('bg-emerald-600', 'bg-amber-500');
+      scheduleNextStep();
+    }
+
+    function stopSequencer() {
+      state.playing = false;
+      if (clockTimer) {
+        clearTimeout(clockTimer);
+        clockTimer = null;
+      }
+      document.getElementById('btnPlay').classList.replace('bg-amber-500', 'bg-emerald-600');
+      renderSequencerGrid();
+    }
+
+    function scheduleNextStep() {
+      if (!state.playing) return;
+      const stepDurMs = (60000 / state.bpm) / 4; // 1/16th step
+
+      executeSequencerStep(state.currentStep);
+
+      const stepLbl = document.getElementById('lblStepCounter');
+      if (stepLbl) {
+        stepLbl.textContent = `STEP ${String(state.currentStep + 1).padStart(2, '0')}/16`;
+      }
+      renderSequencerGrid();
+      if (state.padMode === 'steps') renderPads();
+
+      state.currentStep = (state.currentStep + 1) % 16;
+      clockTimer = setTimeout(scheduleNextStep, stepDurMs);
+    }
+
+    function executeSequencerStep(stepIdx) {
+      const stepDurSec = (60 / state.bpm) / 4;
+
+      // 1. If Arpeggiator is active & latched/held notes exist, play next Arp note on active track
+      if (state.arp.mode !== 'Off' && state.arp.heldNotes.length > 0) {
+        const arpNotes = getNextArpNotes();
+        if (arpNotes.length > 0) {
+          playNotesOnActiveTrack(arpNotes, 108, stepDurSec * 0.85, stepIdx);
+        }
+      }
+
+      // 2. Play all 4 tracks' enabled sequencer steps
+      state.tracks.forEach((trk, tIdx) => {
+        const st = trk.steps[stepIdx];
+        if (!st.enabled) return;
+
+        const ratchets = Math.max(1, st.ratchet || 1);
+        for (let r = 0; r < ratchets; r++) {
+          setTimeout(() => {
+            if (!state.playing) return;
+            const dur = (stepDurSec * st.lengthSteps) / ratchets;
+            if (tIdx === 0) {
+              triggerFM4Notes(st.notes, st.velocity, dur, false);
+            } else if (tIdx === 1) {
+              triggerGranularCloud(st.notes, st.velocity);
+            } else if (tIdx === 2) {
+              const sliceIdx = (st.notes[0] - 36 + 16) % 16;
+              triggerSampleSlice(sliceIdx, st.velocity);
+            } else if (tIdx === 3) {
+              triggerFM4Notes(st.notes, st.velocity, dur * 0.75, true);
+            }
+          }, r * ((stepDurSec * 1000) / ratchets));
+        }
+      });
+    }
+
+    function getNextArpNotes() {
+      const base = state.arp.heldNotes.slice().sort((a, b) => a - b);
+      if (base.length === 0) return [];
+      const pool = [];
+      for (let o = 0; o < state.arp.octaves; o++) {
+        for (let n of base) {
+          if (n + o * 12 <= 127) pool.push(n + o * 12);
+        }
+      }
+      if (state.arp.mode === 'ChordRepeat') return base;
+      const N = pool.length;
+      const c = state.arp.cursor++;
+      if (state.arp.mode === 'Up') return [pool[c % N]];
+      if (state.arp.mode === 'Down') return [pool[(N - 1) - (c % N)]];
+      if (state.arp.mode === 'UpDown') {
+        const cycle = N > 2 ? 2 * N - 2 : N;
+        const pos = c % cycle;
+        return [pos < N ? pool[pos] : pool[cycle - pos]];
+      }
+      if (state.arp.mode === 'Converge') {
+        const pair = Math.floor(c / 2) % Math.ceil(N / 2);
+        return [c % 2 === 0 ? pool[pair] : pool[N - 1 - pair]];
+      }
+      if (state.arp.mode === 'PinkyThumb') {
+        if (c % 2 === 0 || N === 1) return [pool[0]];
+        return [pool[1 + (Math.floor(c / 2) % (N - 1))]];
+      }
+      return [pool[0]];
+    }
+
+    // =========================================================================
+    // 7. 4-KNOB HARDWARE ROUTER (Maps Knobs 1-4 to Active Screen & Bank)
+    // =========================================================================
+
+    function onHardwareKnobChange(knobIdx, rawVal) {
+      const norm = rawVal / 100;
+      const pushHeld = document.getElementById('chkPushTurn').checked;
+
+      if (state.activeScreen === 'fm') {
+        const p = state.fmPatch;
+        if (state.fmBank === 0) {
+          if (pushHeld) {
+            p.detunes[knobIdx] = Math.round((norm - 0.5) * 100);
+          } else {
+            p.ratios[knobIdx] = Math.max(0.5, Math.round(norm * 16) * 0.5);
+          }
+        } else if (state.fmBank === 1) {
+          p.levels[knobIdx] = Number(norm.toFixed(2));
+        } else if (state.fmBank === 2) {
+          if (knobIdx === 0) p.modAttack = 0.002 + norm * 0.8;
+          if (knobIdx === 1) p.modDecay = 0.05 + norm * 1.8;
+          if (knobIdx === 2) p.carAttack = 0.002 + norm * 0.8;
+          if (knobIdx === 3) p.carRelease = 0.05 + norm * 2.0;
+        } else {
+          if (knobIdx === 0) p.cutoffHz = Math.round(120 * Math.pow(2, norm * 7));
+          if (knobIdx === 1) p.resonance = Number((0.5 + norm * 12).toFixed(1));
+          if (knobIdx === 2) p.drive = Number(norm.toFixed(2));
+          if (knobIdx === 3) p.waveMorph = Number(norm.toFixed(2));
+        }
+        updateFmScopeBuffer(state.rootMidi);
+      } else if (state.activeScreen === 'granular') {
+        const g = state.grain;
+        if (state.grainBank === 0) {
+          if (knobIdx === 0) g.position = Number(norm.toFixed(2));
+          if (knobIdx === 1) g.grainSizeMs = Math.round(10 + norm * 490);
+          if (knobIdx === 2) g.densityHz = Math.round(4 + norm * 56);
+          if (knobIdx === 3) g.pitchSemi = Math.round((norm - 0.5) * 24);
+        } else {
+          if (knobIdx === 0) g.posSpray = Number((norm * 0.45).toFixed(2));
+          if (knobIdx === 1) g.pitchSpray = Number(norm.toFixed(2));
+          if (knobIdx === 2) g.windowMorph = Number(norm.toFixed(2));
+          if (knobIdx === 3) g.reverseProb = Number(norm.toFixed(2));
+        }
+      } else if (state.activeScreen === 'chopper') {
+        const sl = state.slices[state.selectedSlice];
+        if (knobIdx === 0) sl.start = Math.min(sl.end - 0.02, Number(norm.toFixed(2)));
+        if (knobIdx === 1) sl.end = Math.max(sl.start + 0.02, Number(norm.toFixed(2)));
+        if (knobIdx === 2) sl.stretch = Number((0.5 + norm * 1.5).toFixed(2));
+        if (knobIdx === 3) sl.pitchSemi = Math.round((norm - 0.5) * 24);
+      } else if (state.activeScreen === 'sequencer') {
+        const st = state.tracks[state.activeTrack].steps[state.selectedStep];
+        st.enabled = true;
+        if (knobIdx === 0) {
+          const newRoot = 36 + Math.round(norm * 48);
+          const diff = newRoot - st.notes[0];
+          st.notes = st.notes.map(n => Math.max(24, Math.min(108, n + diff)));
+        }
+        if (knobIdx === 1) st.velocity = Math.max(1, Math.round(norm * 127));
+        if (knobIdx === 2) st.lengthSteps = Number((0.25 + norm * 3.75).toFixed(2));
+        if (knobIdx === 3) {
+          if (pushHeld) {
+            st.ratchet = Math.max(1, Math.min(4, 1 + Math.floor(norm * 3.99)));
+          } else {
+            st.microtiming = Math.round((norm - 0.5) * 90);
+          }
+        }
+        renderSequencerGrid();
+      }
+
+      updateKnobLabelsAndReadouts();
+      drawActiveScreenCanvas();
+    }
+
+    function updateKnobLabelsAndReadouts() {
+      let titles = ['', '', '', ''];
+      let vals = ['', '', '', ''];
+      const p = state.fmPatch;
+      const g = state.grain;
+
+      if (state.activeScreen === 'fm') {
+        if (state.fmBank === 0) {
+          titles = ['Op 1 Ratio', 'Op 2 Ratio', 'Op 3 Ratio', 'Op 4 Ratio'];
+          vals = p.ratios.map((r, i) => `${r.toFixed(1)}x (${p.detunes[i]}c)`);
+        } else if (state.fmBank === 1) {
+          titles = ['Op 1 Level', 'Op 2 Mod Idx', 'Op 3 Level', 'Op 4 Mod Idx'];
+          vals = p.levels.map(l => `${Math.round(l * 100)}%`);
+        } else if (state.fmBank === 2) {
+          titles = ['Mod Attack', 'Mod Decay', 'Carrier Atk', 'Carrier Rel'];
+          vals = [`${Math.round(p.modAttack * 1000)}ms`, `${Math.round(p.modDecay * 1000)}ms`, `${Math.round(p.carAttack * 1000)}ms`, `${Math.round(p.carRelease * 1000)}ms`];
+        } else {
+          titles = ['Filter Cutoff', 'Resonance', 'Harmonic Drive', 'Wave Morph'];
+          vals = [`${p.cutoffHz}Hz`, `Q ${p.resonance}`, `${Math.round(p.drive * 100)}%`, `${Math.round(p.waveMorph * 100)}%`];
+        }
+        document.getElementById('lblFmSummary').textContent =
+          `Op1: ${p.ratios[0]}x | Op2: ${p.ratios[1]}x | Op3: ${p.ratios[2]}x | Op4: ${p.ratios[3]}x | WaveMorph: ${Math.round(p.waveMorph * 100)}%`;
+      } else if (state.activeScreen === 'granular') {
+        if (state.grainBank === 0) {
+          titles = ['Grain Pos', 'Grain Size', 'Density', 'Grain Pitch'];
+          vals = [`${Math.round(g.position * 100)}%`, `${g.grainSizeMs} ms`, `${g.densityHz} Hz`, `${g.pitchSemi >= 0 ? '+' : ''}${g.pitchSemi} st`];
+        } else {
+          titles = ['Pos Spray', 'Shimmer 5th/Oct', 'Window Shape', 'Reverse Prob'];
+          vals = [`${Math.round(g.posSpray * 100)}%`, `${Math.round(g.pitchSpray * 100)}%`, g.windowMorph < 0.35 ? 'Ramp' : (g.windowMorph > 0.7 ? 'Tukey' : 'Hann'), `${Math.round(g.reverseProb * 100)}%`];
+        }
+      } else if (state.activeScreen === 'chopper') {
+        const sl = state.slices[state.selectedSlice];
+        titles = ['Slice Start', 'Slice End', 'Time Stretch', 'Slice Pitch'];
+        vals = [`${Math.round(sl.start * 100)}%`, `${Math.round(sl.end * 100)}%`, `${Math.round(sl.stretch * 100)}%`, `${sl.pitchSemi >= 0 ? '+' : ''}${sl.pitchSemi} st`];
+        document.getElementById('lblChopInfo').textContent =
+          `Slice #${state.selectedSlice + 1} | Start: ${Math.round(sl.start * 100)}% | End: ${Math.round(sl.end * 100)}% | Stretch: ${Math.round(sl.stretch * 100)}% | Pitch: ${sl.pitchSemi} st`;
+      } else if (state.activeScreen === 'sequencer') {
+        const st = state.tracks[state.activeTrack].steps[state.selectedStep];
+        titles = ['Step Pitch', 'Step Velocity', 'Note Length', 'Micro / Ratchet'];
+        vals = [midiToName(st.notes[0]), `${st.velocity}`, `${st.lengthSteps} stp`, `${st.microtiming}% / ${st.ratchet}x`];
+        document.getElementById('lblSelectedStepInfo').textContent =
+          `EDIT STEP ${state.selectedStep + 1}: Note ${midiToName(st.notes[0])} (${st.notes.length}v) | Vel ${st.velocity} | Len ${st.lengthSteps} | Ratchet ${st.ratchet}x`;
+      }
+
+      for (let i = 0; i < 4; i++) {
+        document.getElementById(`lblKnob${i + 1}Title`).textContent = `KNOB ${i + 1}: ${titles[i]}`;
+        document.getElementById(`lblKnob${i + 1}Val`).textContent = vals[i];
+        document.getElementById(`hwKnob${i + 1}Label`).textContent = `${i + 1}. ${titles[i]}`;
+        document.getElementById(`hwKnob${i + 1}Readout`).textContent = vals[i];
+      }
+    }
+
+    // =========================================================================
+    // 8. UI RENDERING: 16 PADS, SEQUENCER GRID & SCREEN CANVASES
+    // =========================================================================
+
+    const MPC_PAD_ORDER = [
+      12, 13, 14, 15, // Row 4 (Top): Pads 13..16
+       8,  9, 10, 11, // Row 3: Pads 9..12
+       4,  5,  6,  7, // Row 2: Pads 5..8
+       0,  1,  2,  3  // Row 1 (Bottom): Pads 1..4
+    ];
+
+    const KEY_LABELS = {
+      12: '1', 13: '2', 14: '3', 15: '4',
+       8: 'Q',  9: 'W', 10: 'E', 11: 'R',
+       4: 'A',  5: 'S',  6: 'D',  7: 'F',
+       0: 'Z',  1: 'X',  2: 'C',  3: 'V'
+    };
+
+    function renderPads() {
+      const container = document.getElementById('padGrid');
+      container.innerHTML = '';
+
+      MPC_PAD_ORDER.forEach(padIdx => {
+        const btn = document.createElement('button');
+        btn.dataset.pad = padIdx;
+        let bgClass = 'bg-slate-800 border-slate-600 text-slate-100';
+        let topText = `PAD ${padIdx + 1}`;
+        let mainText = '';
+        let subText = `[${KEY_LABELS[padIdx]}]`;
+
+        if (state.padMode === 'chord') {
+          if (padIdx >= 12) {
+            const modNames = ['+7th / 9th', 'Sus4 Toggle', `Inversion (${state.chordMods.inversion})`, 'Arp Latch / Strum'];
+            const modActive = [state.chordMods.add7th9th, state.chordMods.sus4Toggle, state.chordMods.inversion > 0, state.chordMods.arpLatch][padIdx - 12];
+            bgClass = modActive
+              ? 'bg-cyan-600 border-cyan-300 text-white shadow-cyan-500/30'
+              : 'bg-cyan-950/80 border-cyan-700/70 text-cyan-200';
+            topText = `MOD PAD ${padIdx + 1}`;
+            mainText = modNames[padIdx - 12];
+          } else {
+            const ch = getChordForPad(padIdx);
+            mainText = ch.label;
+            bgClass = padIdx < 7
+              ? 'bg-emerald-950/85 hover:bg-emerald-900 border-emerald-500/70 text-emerald-200'
+              : 'bg-amber-950/85 hover:bg-amber-900 border-amber-500/70 text-amber-200';
+          }
+        } else if (state.padMode === 'slices') {
+          const isSel = state.selectedSlice === padIdx;
+          bgClass = isSel
+            ? 'bg-emerald-600 border-emerald-300 text-white'
+            : 'bg-slate-800 hover:bg-slate-700 border-emerald-600/60 text-emerald-300';
+          mainText = `Slice #${padIdx + 1}`;
+          const sl = state.slices[padIdx];
+          subText = `${Math.round(sl.start * 100)}–${Math.round(sl.end * 100)}%`;
+        } else if (state.padMode === 'steps') {
+          const st = state.tracks[state.activeTrack].steps[padIdx];
+          const isPlayhead = state.playing && state.currentStep === padIdx;
+          if (isPlayhead) {
+            bgClass = 'bg-amber-500 border-white text-slate-950 font-bold';
+          } else if (st.enabled) {
+            bgClass = 'bg-purple-700 border-purple-300 text-white';
+          } else {
+            bgClass = 'bg-slate-900 border-slate-700 text-slate-400';
+          }
+          topText = `STEP ${padIdx + 1}`;
+          mainText = st.enabled ? (st.label || midiToName(st.notes[0])) : 'Empty';
+        }
+
+        btn.className = `mpc-pad rounded-xl p-2.5 h-20 sm:h-24 border-2 flex flex-col justify-between text-left ${bgClass}`;
+        btn.innerHTML = `
+          <div class="flex items-center justify-between w-full text-[10px] mono opacity-80">
+            <span>${topText}</span>
+            <span>${subText}</span>
+          </div>
+          <div class="text-xs sm:text-sm font-bold mono leading-tight truncate w-full">${mainText}</div>
+        `;
+        btn.addEventListener('click', () => triggerHardwarePad(padIdx));
+        container.appendChild(btn);
+      });
+    }
+
+    function renderSequencerGrid() {
+      const container = document.getElementById('seqGridContainer');
+      if (!container) return;
+      container.innerHTML = '';
+      const trk = state.tracks[state.activeTrack];
+
+      trk.steps.forEach((st, idx) => {
+        const cell = document.createElement('button');
+        const isCurrent = state.playing && state.currentStep === idx;
+        const isSelected = state.selectedStep === idx;
+
+        let cls = 'bg-slate-900 border-slate-800 text-slate-500';
+        if (st.enabled) {
+          cls = 'bg-purple-600/80 border-purple-400 text-white';
+        }
+        if (isSelected) {
+          cls += ' ring-2 ring-amber-400';
+        }
+        if (isCurrent) {
+          cls = 'bg-emerald-500 border-white text-slate-950 font-bold';
+        }
+
+        cell.className = `h-14 rounded border flex flex-col items-center justify-between p-1 text-[10px] mono transition ${cls}`;
+        cell.innerHTML = `
+          <span>${idx + 1}</span>
+          <span class="font-bold truncate max-w-full">${st.enabled ? midiToName(st.notes[0]) : '—'}</span>
+          <span class="w-full h-1 rounded bg-black/30 overflow-hidden">
+            <span class="block h-full bg-amber-300" style="width:${Math.round((st.velocity / 127) * 100)}%"></span>
+          </span>
+        `;
+        cell.addEventListener('click', () => {
+          if (state.selectedStep === idx) {
+            st.enabled = !st.enabled;
+          } else {
+            state.selectedStep = idx;
+            st.enabled = true;
+          }
+          updateKnobLabelsAndReadouts();
+          renderSequencerGrid();
+          if (state.padMode === 'steps') renderPads();
+        });
+        container.appendChild(cell);
+      });
+    }
+
+    function updateChordModStatus() {
+      const m = state.chordMods;
+      document.getElementById('lblChordModsStatus').textContent =
+        `${m.add7th9th ? '7th/9th ON' : 'Triad'} | ${m.sus4Toggle ? 'Sus4' : 'Normal 3rd'} | Inv ${m.inversion} | ${m.arpLatch ? 'Latch/Strum ON' : 'Latch OFF'}`;
+    }
+
+    function drawActiveScreenCanvas() {
+      if (state.activeScreen === 'fm') {
+        const c = document.getElementById('canvasFmScope');
+        if (!c) return;
+        const ctx = c.getContext('2d');
+        c.width = c.clientWidth || 500;
+        c.height = c.clientHeight || 128;
+        ctx.clearRect(0, 0, c.width, c.height);
+
+        // Grid line
+        ctx.strokeStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.moveTo(0, c.height / 2);
+        ctx.lineTo(c.width, c.height / 2);
+        ctx.stroke();
+
+        // FM Waveform
+        ctx.strokeStyle = '#f97316';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        const buf = state.scopeSamples;
+        for (let i = 0; i < buf.length; i++) {
+          const x = (i / (buf.length - 1)) * c.width;
+          const y = (0.5 - buf[i] * 0.42) * c.height;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      } else if (state.activeScreen === 'granular') {
+        const c = document.getElementById('canvasGrainWave');
+        if (!c) return;
+        const ctx = c.getContext('2d');
+        c.width = c.clientWidth || 500;
+        c.height = c.clientHeight || 128;
+        ctx.clearRect(0, 0, c.width, c.height);
+
+        // Draw synthetic waveform envelope
+        ctx.strokeStyle = '#0e7490';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let x = 0; x < c.width; x++) {
+          const norm = x / c.width;
+          const amp = Math.sin(norm * 32) * Math.cos(norm * 7) * 0.38;
+          ctx.moveTo(x, c.height * (0.5 - amp));
+          ctx.lineTo(x, c.height * (0.5 + amp));
+        }
+        ctx.stroke();
+
+        // Draw active grain window band
+        const gx = state.grain.position * c.width;
+        const gw = Math.max(12, (state.grain.grainSizeMs / 1000) * c.width * 0.5);
+        ctx.fillStyle = 'rgba(34, 211, 238, 0.22)';
+        ctx.fillRect(gx - gw / 2, 0, gw, c.height);
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(gx, 0);
+        ctx.lineTo(gx, c.height);
+        ctx.stroke();
+
+        // Draw spawned grain particles
+        const now = performance.now();
+        state.activeGrainsVisual = state.activeGrainsVisual.filter(p => now - p.born < p.lifeMs);
+        state.activeGrainsVisual.forEach(p => {
+          ctx.fillStyle = '#67e8f9';
+          ctx.beginPath();
+          ctx.arc(p.x * c.width, p.y * c.height, p.size * 0.35, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      } else if (state.activeScreen === 'chopper') {
+        const c = document.getElementById('canvasChopperWave');
+        if (!c) return;
+        const ctx = c.getContext('2d');
+        c.width = c.clientWidth || 500;
+        c.height = c.clientHeight || 128;
+        ctx.clearRect(0, 0, c.width, c.height);
+
+        // Draw 16 transient breakbeat waveform
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        for (let x = 0; x < c.width; x++) {
+          const norm = x / c.width;
+          const localPhase = (norm * 16) % 1;
+          const env = Math.exp(-localPhase * 5.5) * 0.42;
+          ctx.moveTo(x, c.height * (0.5 - env));
+          ctx.lineTo(x, c.height * (0.5 + env));
+        }
+        ctx.stroke();
+
+        // Highlight selected slice start/end region
+        const sl = state.slices[state.selectedSlice];
+        const sx = sl.start * c.width;
+        const ex = sl.end * c.width;
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.28)';
+        ctx.fillRect(sx, 0, Math.max(4, ex - sx), c.height);
+
+        // Draw slice markers
+        state.slices.forEach((s, i) => {
+          ctx.strokeStyle = i === state.selectedSlice ? '#fbbf24' : 'rgba(255,255,255,0.25)';
+          ctx.lineWidth = i === state.selectedSlice ? 2 : 1;
+          ctx.beginPath();
+          ctx.moveTo(s.start * c.width, 0);
+          ctx.lineTo(s.start * c.width, c.height);
+          ctx.stroke();
+        });
+      }
+    }
+
+    // =========================================================================
+    // 9. DEMO PATTERN LOADER & EVENT LISTENERS
+    // =========================================================================
+
+    function loadDemoPattern() {
+      ensureAudio();
+      // Track 0: 4-Op FM Chord Stabs on steps 0, 6, 8, 14
+      state.tracks[0].steps.forEach((s, i) => { s.enabled = false; });
+      [[0, 0], [6, 3], [8, 5], [14, 9]].forEach(([stepIdx, padIdx]) => {
+        const ch = getChordForPad(padIdx);
+        state.tracks[0].steps[stepIdx] = {
+          enabled: true,
+          notes: ch.notes,
+          velocity: 105,
+          lengthSteps: 2.0,
+          microtiming: 0,
+          ratchet: 1,
+          label: ch.label.split(' ')[0]
+        };
+      });
+
+      // Track 1: Granular Cloud shimmer on steps 4 and 12
+      state.tracks[1].steps.forEach(s => { s.enabled = false; });
+      [4, 12].forEach(stepIdx => {
+        state.tracks[1].steps[stepIdx] = {
+          enabled: true,
+          notes: [state.rootMidi, state.rootMidi + 7],
+          velocity: 95,
+          lengthSteps: 2.5,
+          microtiming: 0,
+          ratchet: 1,
+          label: 'Cloud'
+        };
+      });
+
+      // Track 2: Chopped Breakbeat slices across 16 steps
+      [0, 2, 4, 6, 8, 9, 10, 12, 14, 15].forEach(stepIdx => {
+        state.tracks[2].steps[stepIdx] = {
+          enabled: true,
+          notes: [36 + (stepIdx % 8)],
+          velocity: stepIdx % 4 === 0 ? 120 : 95,
+          lengthSteps: 1.0,
+          microtiming: 0,
+          ratchet: stepIdx === 15 ? 2 : 1,
+          label: `Slc ${stepIdx % 8 + 1}`
+        };
+      });
+
+      // Track 3: FM Sub Bassline
+      state.tracks[3].steps.forEach(s => { s.enabled = false; });
+      [[0, 36], [3, 36], [6, 41], [10, 44], [12, 43]].forEach(([stepIdx, note]) => {
+        state.tracks[3].steps[stepIdx] = {
+          enabled: true,
+          notes: [note],
+          velocity: 115,
+          lengthSteps: 1.5,
+          microtiming: 0,
+          ratchet: 1,
+          label: midiToName(note)
+        };
+      });
+
+      renderSequencerGrid();
+      renderPads();
+      startSequencer();
+    }
+
+    function wireEvents() {
+      // Screen View Tabs
+      document.querySelectorAll('.screen-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.activeScreen = btn.dataset.screen;
+          document.querySelectorAll('.screen-tab').forEach(b => {
+            b.className = b === btn
+              ? 'screen-tab py-1.5 px-2 rounded bg-orange-600 text-white font-semibold text-xs text-center transition'
+              : 'screen-tab py-1.5 px-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs text-center transition';
+          });
+          ['fm', 'granular', 'chopper', 'sequencer'].forEach(v => {
+            const el = document.getElementById(`view-${v}`);
+            if (el) {
+              el.classList.toggle('hidden', v !== state.activeScreen);
+              el.classList.toggle('flex', v === state.activeScreen);
+            }
+          });
+          updateKnobLabelsAndReadouts();
+          drawActiveScreenCanvas();
+          renderSequencerGrid();
+        });
+      });
+
+      // 16-Pad Mode Buttons
+      document.querySelectorAll('.pad-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.padMode = btn.dataset.padmode;
+          document.querySelectorAll('.pad-mode-btn').forEach(b => {
+            b.className = b === btn
+              ? 'pad-mode-btn px-2.5 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-bold mono shadow'
+              : 'pad-mode-btn px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold mono border border-slate-700';
+          });
+          renderPads();
+        });
+      });
+
+      // Track Select Buttons
+      document.querySelectorAll('.track-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.activeTrack = Number(btn.dataset.track);
+          document.querySelectorAll('.track-btn').forEach(b => {
+            const active = b === btn;
+            b.classList.toggle('bg-orange-600', active);
+            b.classList.toggle('text-white', active);
+            b.classList.toggle('bg-slate-900', !active);
+            b.classList.toggle('text-slate-300', !active);
+          });
+          const names = ['TRK 1: 4-OP FM', 'TRK 2: GRANULAR', 'TRK 3: CHOPPER', 'TRK 4: FM SUB/DRUM'];
+          document.getElementById('lblActiveTrack').textContent = names[state.activeTrack];
+          renderSequencerGrid();
+          renderPads();
+          updateKnobLabelsAndReadouts();
+        });
+      });
+
+      // 4 Hardware Knobs
+      [1, 2, 3, 4].forEach((n, idx) => {
+        const el = document.getElementById(`knob${n}`);
+        el.addEventListener('input', () => onHardwareKnobChange(idx, Number(el.value)));
+      });
+
+      // FM Bank Buttons
+      document.querySelectorAll('.fm-bank-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.fmBank = Number(btn.dataset.fmbank);
+          document.querySelectorAll('.fm-bank-btn').forEach(b => {
+            b.className = b === btn
+              ? 'fm-bank-btn py-1 px-2 rounded bg-amber-500/20 border border-amber-500 text-amber-300 text-xs mono font-semibold'
+              : 'fm-bank-btn py-1 px-2 rounded bg-slate-900 border border-slate-800 text-slate-400 text-xs mono';
+          });
+          updateKnobLabelsAndReadouts();
+        });
+      });
+
+      // Granular Bank Buttons
+      document.querySelectorAll('.grain-bank-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.grainBank = Number(btn.dataset.grainbank);
+          document.querySelectorAll('.grain-bank-btn').forEach(b => {
+            b.className = b === btn
+              ? 'grain-bank-btn py-1 px-2 rounded bg-cyan-500/20 border border-cyan-500 text-cyan-300 text-xs mono font-semibold'
+              : 'grain-bank-btn py-1 px-2 rounded bg-slate-900 border border-slate-800 text-slate-400 text-xs mono';
+          });
+          updateKnobLabelsAndReadouts();
+        });
+      });
+
+      // FM Algorithm & Sample-FM
+      document.getElementById('selFmAlg').addEventListener('change', (e) => {
+        state.fmPatch.algorithm = Number(e.target.value);
+        updateFmScopeBuffer(state.rootMidi);
+      });
+      document.getElementById('btnToggleSampleFm').addEventListener('click', (e) => {
+        state.fmPatch.sampleFMDepth = state.fmPatch.sampleFMDepth > 0 ? 0 : 0.45;
+        e.target.textContent = state.fmPatch.sampleFMDepth > 0 ? 'ON (45% Transient FM)' : 'OFF (0%)';
+        e.target.classList.toggle('bg-orange-600', state.fmPatch.sampleFMDepth > 0);
+        e.target.classList.toggle('text-white', state.fmPatch.sampleFMDepth > 0);
+      });
+
+      // Granular Controls
+      document.getElementById('selGrainSource').addEventListener('change', (e) => {
+        state.grainSource = e.target.value;
+        drawActiveScreenCanvas();
+      });
+      document.getElementById('btnGrainFreeze').addEventListener('click', (e) => {
+        state.grainFreeze = !state.grainFreeze;
+        state.grain.posSpray = state.grainFreeze ? 0.005 : 0.08;
+        e.target.textContent = `FREEZE CLOUD: ${state.grainFreeze ? 'ON' : 'OFF'}`;
+        e.target.classList.toggle('bg-cyan-600', state.grainFreeze);
+        e.target.classList.toggle('text-white', state.grainFreeze);
+        updateKnobLabelsAndReadouts();
+      });
+      document.getElementById('btnResampleFmToGrain').addEventListener('click', () => {
+        ensureAudio();
+        const ch = getChordForPad(0);
+        triggerFM4Notes(ch.notes, 115, 0.5, false);
+        state.grainSource = 'chord';
+        document.getElementById('selGrainSource').value = 'chord';
+        triggerGranularCloud(ch.notes, 110);
+      });
+
+      // Interactive Granular Waveform Scrubbing
+      const scrubBox = document.getElementById('grainScrubBox');
+      scrubBox.addEventListener('pointerdown', (e) => {
+        const rect = scrubBox.getBoundingClientRect();
+        state.grain.position = Math.max(0.02, Math.min(0.98, (e.clientX - rect.left) / rect.width));
+        triggerGranularCloud([state.rootMidi], 105);
+        updateKnobLabelsAndReadouts();
+      });
+
+      // Chopper Controls
+      document.getElementById('btnAutoChop').addEventListener('click', () => {
+        state.slices.forEach((s, i) => { s.start = i / 16; s.end = (i + 1) / 16; });
+        drawActiveScreenCanvas();
+        renderPads();
+      });
+      document.getElementById('btnGridChop8').addEventListener('click', () => {
+        state.slices.forEach((s, i) => {
+          const idx8 = i % 8;
+          s.start = idx8 / 8;
+          s.end = (idx8 + 1) / 8;
+        });
+        drawActiveScreenCanvas();
+        renderPads();
+      });
+      document.getElementById('btnLazyChop').addEventListener('click', (e) => {
+        state.lazyChopCursor = state.lazyChopCursor ? 0 : 1;
+        e.target.textContent = state.lazyChopCursor ? 'Lazy Chop: ACTIVE' : 'Lazy Chop: Tap Pads';
+      });
+      document.getElementById('btnAuditionSlice').addEventListener('click', () => {
+        triggerSampleSlice(state.selectedSlice, 118);
+      });
+      document.getElementById('btnSendSliceToGrain').addEventListener('click', () => {
+        const sl = state.slices[state.selectedSlice];
+        state.grainSource = 'break';
+        document.getElementById('selGrainSource').value = 'break';
+        state.grain.position = Number(((sl.start + sl.end) * 0.5).toFixed(2));
+        document.querySelector('[data-screen="granular"]').click();
+        triggerGranularCloud([state.rootMidi], 115);
+      });
+
+      // Root, Scale, BPM, Quantize, Arp
+      document.getElementById('selRootNote').addEventListener('change', (e) => {
+        state.rootMidi = Number(e.target.value);
+        renderPads();
+      });
+      document.getElementById('selScaleType').addEventListener('change', (e) => {
+        state.scaleType = e.target.value;
+        renderPads();
+      });
+      document.getElementById('inpBpm').addEventListener('change', (e) => {
+        state.bpm = Math.max(60, Math.min(200, Number(e.target.value) || 118));
+      });
+      document.getElementById('selQuantize').addEventListener('change', (e) => {
+        state.quantizeMode = e.target.value;
+      });
+      document.getElementById('selArpMode').addEventListener('change', (e) => {
+        state.arp.mode = e.target.value;
+      });
+      document.getElementById('selArpOct').addEventListener('change', (e) => {
+        state.arp.octaves = Number(e.target.value);
+      });
+      document.getElementById('btnClearPattern').addEventListener('click', () => {
+        state.tracks[state.activeTrack].steps.forEach(s => { s.enabled = false; });
+        renderSequencerGrid();
+        if (state.padMode === 'steps') renderPads();
+      });
+
+      // Touch Strip & Jog Wheel
+      document.getElementById('sliderTouchStrip').addEventListener('input', (e) => {
+        const v = Number(e.target.value);
+        document.getElementById('lblTouchStripVal').textContent = `${v}%`;
+        state.grain.position = Number((v / 100).toFixed(2));
+        state.fmPatch.waveMorph = Number((v / 100).toFixed(2));
+        updateKnobLabelsAndReadouts();
+        drawActiveScreenCanvas();
+      });
+      document.getElementById('btnJogPrev').addEventListener('click', () => {
+        state.fmPatch.algorithm = (state.fmPatch.algorithm + 7) % 8;
+        document.getElementById('selFmAlg').value = String(state.fmPatch.algorithm);
+        updateFmScopeBuffer(state.rootMidi);
+      });
+      document.getElementById('btnJogNext').addEventListener('click', () => {
+        state.fmPatch.algorithm = (state.fmPatch.algorithm + 1) % 8;
+        document.getElementById('selFmAlg').value = String(state.fmPatch.algorithm);
+        updateFmScopeBuffer(state.rootMidi);
+      });
+
+      // Transport & Top Bar Buttons
+      document.getElementById('btnAudioInit').addEventListener('click', () => {
+        ensureAudio();
+        const ch = getChordForPad(0);
+        triggerFM4Notes(ch.notes, 110, 0.35, false);
+      });
+      document.getElementById('btnLoadDemo').addEventListener('click', loadDemoPattern);
+      document.getElementById('btnMute').addEventListener('click', (e) => {
+        state.muted = !state.muted;
+        e.target.textContent = `Mute: ${state.muted ? 'ON' : 'OFF'}`;
+      });
+      document.getElementById('btnPlay').addEventListener('click', () => {
+        if (state.playing) stopSequencer();
+        else startSequencer();
+      });
+      document.getElementById('btnStop').addEventListener('click', stopSequencer);
+      document.getElementById('btnRec').addEventListener('click', (e) => {
+        state.recording = !state.recording;
+        e.target.classList.toggle('bg-rose-600', state.recording);
+        e.target.classList.toggle('text-white', state.recording);
+        e.target.textContent = state.recording ? '● REC ON' : '● REC PAD';
+      });
+
+      // Computer Keyboard -> 16 Pads + Spacebar Transport
+      const keyMap = {
+        '1': 12, '2': 13, '3': 14, '4': 15,
+        'q': 8,  'w': 9,  'e': 10, 'r': 11,
+        'a': 4,  's': 5,  'd': 6,  'f': 7,
+        'z': 0,  'x': 1,  'c': 2,  'v': 3
+      };
+      window.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+        const k = e.key.toLowerCase();
+        if (k === ' ') {
+          e.preventDefault();
+          if (state.playing) stopSequencer();
+          else startSequencer();
+        } else if (keyMap[k] !== undefined) {
+          triggerHardwarePad(keyMap[k]);
+        }
+      });
+
+      window.addEventListener('resize', drawActiveScreenCanvas);
+    }
+
+    window.addEventListener('load', () => {
+      renderPads();
+      renderSequencerGrid();
+      updateKnobLabelsAndReadouts();
+      updateFmScopeBuffer(60);
+      wireEvents();
+    });
+  </script>
+</body>
+</html>
